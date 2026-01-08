@@ -157,17 +157,17 @@ export const fetchOrdersFromWP = async (): Promise<Order[]> => {
         statusHistory: { placed: new Date(wc.date_created).toLocaleDateString() },
         courier_tracking_code: tracking?.courier_tracking_code || undefined,
         courier_status: tracking?.courier_status || undefined,
-        courier_name: (detectedCourier as 'Steadfast' | 'Pathao') || undefined
+        courier_name: (detectedCourier as string) || undefined
       };
     });
 
     // Handle local tracking entries without specific order data
     localTracking.forEach(tracking => {
-      const alreadyMapped = mappedOrders.some(o => String(o.id) === String(tracking.id));
+      const alreadyMapped = mappedOrders.some(o => String(o.id) === String(tracking.order_id || tracking.id));
       if (!alreadyMapped) {
         let mappedStatus: Order['status'] = 'Pending';
-        if (tracking.courier_status) {
-          const cs = tracking.courier_status.toLowerCase();
+        if (tracking.status) {
+          const cs = tracking.status.toLowerCase();
           if (cs.includes('delivered')) mappedStatus = 'Delivered';
           else if (cs.includes('cancelled')) mappedStatus = 'Cancelled';
           else if (cs.includes('return')) mappedStatus = 'Returned';
@@ -175,28 +175,28 @@ export const fetchOrdersFromWP = async (): Promise<Order[]> => {
         }
 
         mappedOrders.push({
-          id: String(tracking.id),
-          timestamp: Date.now(),
+          id: String(tracking.order_id || tracking.id),
+          timestamp: tracking.timestamp ? parseInt(tracking.timestamp) : Date.now(),
           customer: {
-            name: 'Local Tracking Customer',
+            name: tracking.customer_name || 'Manual Entry Customer',
             email: '',
-            phone: '',
-            avatar: `https://ui-avatars.com/api/?name=L&background=random`,
+            phone: tracking.customer_phone || '',
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(tracking.customer_name || 'M')}&background=random`,
             orderCount: 0
           },
-          address: 'Local Tracking Entry',
-          date: new Date().toLocaleString(),
-          paymentMethod: 'Tracking Only',
+          address: tracking.customer_address || 'Manual Dispatch Address',
+          date: tracking.date || new Date().toLocaleString(),
+          paymentMethod: 'Manual Entry',
           products: [],
-          subtotal: 0,
+          subtotal: parseFloat(tracking.amount || '0'),
           shippingCharge: 0,
           discount: 0,
-          total: 0,
+          total: parseFloat(tracking.amount || '0'),
           status: mappedStatus,
           statusHistory: { placed: new Date().toLocaleDateString() },
-          courier_tracking_code: tracking.courier_tracking_code,
-          courier_status: tracking.courier_status,
-          courier_name: tracking.courier_name || ( /^\d+$/.test(tracking.courier_tracking_code) ? 'Pathao' : 'Steadfast' )
+          courier_tracking_code: tracking.tracking_code || tracking.courier_tracking_code,
+          courier_status: tracking.status || tracking.courier_status,
+          courier_name: tracking.courier_name || ( /^\d+$/.test(tracking.tracking_code || '') ? 'Pathao' : 'Steadfast' )
         });
       }
     });
