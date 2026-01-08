@@ -11,6 +11,21 @@ export const identifyCourierByTrackingCode = (trackingCode: string): 'Steadfast'
   return /^\d+$/.test(trackingCode) ? 'Pathao' : 'Steadfast';
 };
 
+/**
+ * Maps Steadfast Courier statuses to application internal order statuses
+ */
+export const mapSteadfastStatusToInternal = (status: string): Order['status'] => {
+  const s = status.toLowerCase();
+  
+  if (s.includes('delivered')) return 'Delivered';
+  if (s.includes('cancelled') || s.includes('reject')) return 'Cancelled';
+  if (s.includes('return')) return 'Returned';
+  if (s.includes('transit') || s.includes('shipping') || s.includes('out_for_delivery') || s.includes('picked')) return 'Shipping';
+  if (s.includes('pending') || s.includes('hold') || s.includes('packaging')) return 'Packaging';
+  
+  return 'Pending';
+};
+
 const fetchSetting = async (key: string) => {
   try {
     const res = await fetch(`${SETTINGS_URL}?key=${key}`);
@@ -166,15 +181,13 @@ export const syncOrderStatusWithCourier = async (orders: Order[]) => {
       let currentStatus = order.status;
       let courierStatus = trackingInfo.courier_status;
 
-      // Special handling for Pathao events via webhook
-      if (courier === 'Pathao' && courierStatus) {
-        currentStatus = mapPathaoEventToStatus(courierStatus);
-      } else if (courierStatus) {
-        // Fallback for Steadfast polling
-        const cs = courierStatus.toLowerCase();
-        if (cs.includes('delivered')) currentStatus = 'Delivered';
-        else if (cs.includes('cancelled')) currentStatus = 'Cancelled';
-        else if (cs.includes('return')) currentStatus = 'Returned';
+      if (courierStatus) {
+        if (courier === 'Pathao') {
+          currentStatus = mapPathaoEventToStatus(courierStatus);
+        } else {
+          // Default Steadfast mapping (polling or webhook)
+          currentStatus = mapSteadfastStatusToInternal(courierStatus);
+        }
       }
 
       updatedOrders[i] = {

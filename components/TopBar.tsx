@@ -14,7 +14,8 @@ export const TopBar: React.FC = () => {
   const [pathaoConfig, setPathaoConfig] = useState<PathaoConfig>({
     clientId: '', clientSecret: '', username: '', password: '', storeId: '', isSandbox: true, webhookSecret: ''
   });
-  const [copied, setCopied] = useState(false);
+  const [copiedPathao, setCopiedPathao] = useState(false);
+  const [copiedSteadfast, setCopiedSteadfast] = useState(false);
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -40,12 +41,19 @@ export const TopBar: React.FC = () => {
     window.location.reload();
   };
 
-  const webhookUrl = `${window.location.origin}/api/pathao_webhook.php`;
+  const pathaoWebhookUrl = `${window.location.origin}/api/pathao_webhook.php`;
+  const steadfastWebhookUrl = `${window.location.origin}/api/steadfast_webhook.php`;
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyPathao = () => {
+    navigator.clipboard.writeText(pathaoWebhookUrl);
+    setCopiedPathao(true);
+    setTimeout(() => setCopiedPathao(false), 2000);
+  };
+
+  const copySteadfast = () => {
+    navigator.clipboard.writeText(steadfastWebhookUrl);
+    setCopiedSteadfast(true);
+    setTimeout(() => setCopiedSteadfast(false), 2000);
   };
 
   return (
@@ -192,10 +200,32 @@ export const TopBar: React.FC = () => {
                       onChange={(e) => setCourierConfig({...courierConfig, secretKey: e.target.value})}
                     />
                   </div>
+
+                  {/* Steadfast Webhook Section */}
+                  <div className="pt-2 border-t border-gray-100 mt-2 space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-orange-600 uppercase">Webhook URL (Copy to Steadfast Panel)</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          readOnly
+                          value={steadfastWebhookUrl}
+                          className="flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-[10px] font-mono outline-none"
+                        />
+                        <button 
+                          onClick={copySteadfast}
+                          className="p-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                        >
+                          {copiedSteadfast ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-blue-50 p-3 rounded-lg flex gap-3 text-blue-600">
                     <Truck size={16} className="shrink-0" />
                     <p className="text-[10px] leading-relaxed">
-                      Collect these keys from <span className="font-bold">Steadfast Panel &gt; Settings &gt; API</span>.
+                      Collect keys from <span className="font-bold">Steadfast Panel &gt; Settings &gt; API</span>. Set the Webhook URL there for auto updates.
                     </p>
                   </div>
                 </>
@@ -254,7 +284,7 @@ export const TopBar: React.FC = () => {
                     />
                   </div>
                   
-                  {/* Webhook Section */}
+                  {/* Pathao Webhook Section */}
                   <div className="pt-2 border-t border-gray-100 mt-2 space-y-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-orange-600 uppercase">Webhook URL (Copy to Pathao Panel)</label>
@@ -262,14 +292,14 @@ export const TopBar: React.FC = () => {
                         <input 
                           type="text" 
                           readOnly
-                          value={webhookUrl}
+                          value={pathaoWebhookUrl}
                           className="flex-1 p-2 bg-gray-100 border border-gray-200 rounded text-[10px] font-mono outline-none"
                         />
                         <button 
-                          onClick={copyToClipboard}
+                          onClick={copyPathao}
                           className="p-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
                         >
-                          {copied ? <Check size={14} /> : <Copy size={14} />}
+                          {copiedPathao ? <Check size={14} /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
