@@ -13,7 +13,7 @@ import {
   XCircle,
   RotateCcw
 } from 'lucide-react';
-import { Order, DashboardStats } from '../types';
+import { Order, DashboardStats, Expense } from '../types';
 
 const StatusTrackingCard: React.FC<{ 
   label: string; 
@@ -64,10 +64,10 @@ const StatusTrackingCard: React.FC<{
 interface AnalyticsViewProps {
   orders: Order[];
   stats: DashboardStats;
+  expenses: Expense[];
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) => {
-  // Use last 7 days as default range if possible, or current day
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats, expenses }) => {
   const today = new Date().toISOString().split('T')[0];
   const lastWeek = new Date();
   lastWeek.setDate(lastWeek.getDate() - 7);
@@ -85,13 +85,24 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
     });
   }, [orders, dateRange]);
 
-  const analyticsData = useMemo(() => {
-    const totalPosSale = filteredOrders.reduce((acc, o) => acc + o.total, 0);
-    const expenses = filteredOrders.length * 5;
-    const netProfit = totalPosSale - expenses; // New Logic: Profit = Total Sale - Expenses
-    const grossProfit = totalPosSale * 0.45;
+  const filteredExpenses = useMemo(() => {
+    return (expenses || []).filter(e => {
+      return e.date >= dateRange.start && e.date <= dateRange.end;
+    });
+  }, [expenses, dateRange]);
 
-    // Grouping by Day of Week for chart
+  const analyticsData = useMemo(() => {
+    // 1. Total Sale = Only Delivered orders money
+    const deliveredOrders = filteredOrders.filter(o => o.status === 'Delivered');
+    const totalDeliveredSale = deliveredOrders.reduce((acc, o) => acc + o.total, 0);
+    
+    // 2. Total Expenses = From the expenses records in the date range
+    const totalExpensesInRange = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+    
+    // 3. Net Profit = Total Delivered Sale - Total Expenses
+    const netProfit = totalDeliveredSale - totalExpensesInRange;
+
+    // Chart Data logic
     const dayMap: Record<string, number> = {
       'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0, 'Sun': 0
     };
@@ -105,15 +116,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
 
     const chartData = Object.entries(dayMap).map(([name, value]) => ({ name, value }));
 
-    // Status Percentages
+    // 4. Status Percentages (Real calculation relative to all filtered orders)
     const totalCount = filteredOrders.length || 1;
     const getStatusCount = (s: Order['status']) => filteredOrders.filter(o => o.status === s).length;
     
     return {
       netProfit,
-      grossProfit,
-      expenses,
-      posSale: totalPosSale,
+      expenses: totalExpensesInRange,
+      deliveredSale: totalDeliveredSale,
       chartData,
       statusPercentages: {
         delivered: Math.round((getStatusCount('Delivered') / totalCount) * 100),
@@ -122,7 +132,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
         returned: Math.round((getStatusCount('Returned') / totalCount) * 100)
       }
     };
-  }, [filteredOrders]);
+  }, [filteredOrders, filteredExpenses]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'Select Date';
@@ -132,7 +142,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Top Stat Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
           title="Profit" 
@@ -148,20 +157,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
         />
         <StatCard 
           title="Total Sale" 
-          value={analyticsData.posSale.toLocaleString()} 
+          value={analyticsData.deliveredSale.toLocaleString()} 
           change={100} 
           icon={<Receipt size={20} />} 
         />
       </div>
 
-      {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Selling Statistics Chart */}
         <div className="lg:col-span-8 bg-white p-6 rounded-xl border border-gray-100 flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-bold text-gray-800">Selling Statistics</h3>
             
-            {/* Interactive Date Picker Container */}
             <div className="flex items-center gap-2 relative group">
               <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-100 rounded text-xs font-medium text-gray-400 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer relative overflow-hidden">
                 <span>{formatDate(dateRange.start)} - {formatDate(dateRange.end)}</span>
@@ -188,31 +194,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats }) =
             <SellingStatistics data={analyticsData.chartData} />
           </div>
 
-          {/* Chart Legend */}
           <div className="flex justify-center items-center gap-6 mt-4 pb-2">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
-              <span className="text-xs text-gray-500 font-medium">Shipping</span>
+              <span className="text-xs text-gray-500 font-medium">Daily Sale</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></div>
-              <span className="text-xs text-gray-500 font-medium">Delivered</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 flex items-center justify-center">
-                <div className="w-2 h-0.5 bg-orange-400"></div>
-                <div className="w-1 h-1 rounded-full bg-orange-400 absolute"></div>
-              </div>
-              <span className="text-xs text-gray-500 font-medium">Returned</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-              <span className="text-xs text-gray-500 font-medium">Cancelled</span>
+              <span className="text-xs text-gray-500 font-medium">Target Growth</span>
             </div>
           </div>
         </div>
 
-        {/* Right: Order Status Tracking */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           <StatusTrackingCard 
             label="Delivered" 

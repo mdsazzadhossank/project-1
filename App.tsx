@@ -316,7 +316,7 @@ const App: React.FC = () => {
       case 'dashboard':
         return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={loadAllData} hasConfig={hasConfig} />;
       case 'analytics':
-        return <AnalyticsView orders={orders} stats={stats} />;
+        return <AnalyticsView orders={orders} stats={stats} expenses={expenses} />;
       case 'bulk-sms':
         return <BulkSMSView customers={customers} orders={orders} products={products} initialTargetPhone={smsPhoneTarget} />;
       case 'courier':
