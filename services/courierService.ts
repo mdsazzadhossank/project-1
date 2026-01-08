@@ -1,6 +1,7 @@
 
 import { CourierConfig, Order } from "../types";
-import { getPathaoOrderStatus, mapPathaoEventToStatus } from "./pathaoService";
+// Removed non-existent import getPathaoOrderStatus
+import { mapPathaoEventToStatus } from "./pathaoService";
 
 const PROXY_URL = "api/courier.php";
 const TRACKING_URL = "api/local_tracking.php";
