@@ -23,7 +23,8 @@ import {
   FileText,
   AlertTriangle,
   Edit3,
-  CheckCircle
+  CheckCircle,
+  DollarSign
 } from 'lucide-react';
 import { 
   getCourierBalance, 
@@ -33,6 +34,7 @@ import {
   identifyCourierByTrackingCode
 } from '../services/courierService';
 import { getPathaoConfig, checkPathaoConnection } from '../services/pathaoService';
+import { syncCustomerWithDB } from '../services/customerService';
 import { Order } from '../types';
 
 type CourierType = 'Steadfast' | 'Pathao';
@@ -52,7 +54,11 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
     order_id: '',
     courier_name: '',
     tracking_code: '',
-    status: 'Shipping'
+    status: 'Shipping',
+    customer_name: '',
+    customer_phone: '',
+    customer_address: '',
+    amount: ''
   });
   
   const loadData = async () => {
@@ -141,22 +147,51 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
   const themeText = activeCourier === 'Steadfast' ? 'text-orange-600' : 'text-red-600';
 
   const handleManualSubmit = async () => {
-    if (!manualData.order_id || !manualData.tracking_code || !manualData.courier_name) {
-      alert("Please fill all required fields.");
+    if (!manualData.order_id || !manualData.tracking_code || !manualData.customer_name || !manualData.customer_phone) {
+      alert("Please fill all required fields (Name, Phone, ID, Tracking).");
       return;
     }
     setLoading(true);
     try {
-      const res = await saveTrackingLocally(manualData.order_id, manualData.tracking_code, manualData.status, manualData.courier_name);
+      const amount = parseFloat(manualData.amount) || 0;
+      
+      // Save tracking info
+      const res = await saveTrackingLocally(manualData.order_id, manualData.tracking_code, manualData.status, manualData.courier_name, {
+        name: manualData.customer_name,
+        phone: manualData.customer_phone,
+        address: manualData.customer_address,
+        amount: amount
+      });
+
+      // Also sync with customer database so order appears with name in dashboard
+      await syncCustomerWithDB({
+        name: manualData.customer_name,
+        phone: manualData.customer_phone,
+        address: manualData.customer_address,
+        total: amount,
+        order_id: manualData.order_id
+      });
+
       if (res.status !== "error") {
-        alert("Manual Entry Saved!");
+        alert("Manual Entry Saved Successfully!");
         setShowManualModal(false);
+        setManualData({
+            order_id: '',
+            courier_name: '',
+            tracking_code: '',
+            status: 'Shipping',
+            customer_name: '',
+            customer_phone: '',
+            customer_address: '',
+            amount: ''
+        });
         loadData();
       } else {
-        alert("Failed to save. Check order ID.");
+        alert("Failed to save tracking. Please check ID.");
       }
     } catch (e) {
-      alert("Error occurred while saving.");
+      console.error(e);
+      alert("Error occurred while saving manual entry.");
     } finally {
       setLoading(false);
     }
@@ -207,48 +242,111 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
       {/* Manual Entry Modal */}
       {showManualModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
               <div>
                 <h3 className="text-xl font-black text-gray-800">Add Courier Data</h3>
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Manual Link Tracking ID</p>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Manual {activeCourier} Linkage</p>
               </div>
               <button onClick={() => setShowManualModal(false)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
                 <X size={24} />
               </button>
             </div>
             
-            <div className="p-8 space-y-5">
-              <div className="space-y-4">
+            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Order ID (Invoice)</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <FileText size={10} /> Order ID (Invoice)
+                  </label>
                   <input 
                     type="text" 
                     placeholder="e.g. 12543"
-                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
                     value={manualData.order_id}
                     onChange={(e) => setManualData({...manualData, order_id: e.target.value})}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Courier Name</label>
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <Truck size={10} /> Tracking ID
+                  </label>
                   <input 
                     type="text" 
-                    placeholder="Steadfast, Pathao, RedX etc."
-                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
-                    value={manualData.courier_name}
-                    onChange={(e) => setManualData({...manualData, courier_name: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Tracking ID</label>
-                  <input 
-                    type="text" 
-                    placeholder="Enter consignment number"
-                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    placeholder="Consignment No."
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
                     value={manualData.tracking_code}
                     onChange={(e) => setManualData({...manualData, tracking_code: e.target.value})}
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <User size={10} /> Recipient Name
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="Customer Name"
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.customer_name}
+                    onChange={(e) => setManualData({...manualData, customer_name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <Phone size={10} /> Phone Number
+                  </label>
+                  <input 
+                    type="tel" 
+                    placeholder="017xxxxxxxx"
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.customer_phone}
+                    onChange={(e) => setManualData({...manualData, customer_phone: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                  <MapPin size={10} /> Full Address
+                </label>
+                <textarea 
+                  placeholder="Street, City, Area details"
+                  className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner h-20 resize-none"
+                  value={manualData.customer_address}
+                  onChange={(e) => setManualData({...manualData, customer_address: e.target.value})}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <DollarSign size={10} /> COD Amount
+                  </label>
+                  <input 
+                    type="number" 
+                    placeholder="৳ Total Amount"
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.amount}
+                    onChange={(e) => setManualData({...manualData, amount: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-1">
+                    <Zap size={10} /> Initial Status
+                  </label>
+                  <select 
+                    className="w-full px-5 py-3.5 bg-gray-50 border border-transparent rounded-[1.2rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner cursor-pointer appearance-none"
+                    value={manualData.status}
+                    onChange={(e) => setManualData({...manualData, status: e.target.value})}
+                  >
+                    <option value="Shipping">Shipping</option>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Delivered">Delivered</option>
+                    <option value="Returned">Returned</option>
+                  </select>
                 </div>
               </div>
 
@@ -259,7 +357,7 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
                   className="w-full py-5 bg-orange-600 text-white font-black rounded-[2rem] text-xs uppercase tracking-widest shadow-xl shadow-orange-100 hover:bg-orange-700 transition-all flex items-center justify-center gap-2"
                 >
                   {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-                  Link Tracking Data
+                  Save Full Dispatch Info
                 </button>
               </div>
             </div>

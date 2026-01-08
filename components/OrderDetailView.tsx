@@ -120,7 +120,12 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
           tracking: res.consignment.tracking_code,
           courier: 'Steadfast'
         });
-        await saveTrackingLocally(order.id, res.consignment.tracking_code, res.consignment.status, 'Steadfast');
+        await saveTrackingLocally(order.id, res.consignment.tracking_code, res.consignment.status, 'Steadfast', {
+            name: order.customer.name,
+            phone: order.customer.phone,
+            address: order.address,
+            amount: order.total
+        });
         alert("Sent to Steadfast Courier Successfully!");
       } else {
         alert("Error: " + (res.message || "Failed to create consignment"));
@@ -144,7 +149,12 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
       if (res.data && res.data.consignment_id) {
         const tracking = res.data.consignment_id;
         setShippingResult({ tracking, courier: 'Pathao' });
-        await saveTrackingLocally(order.id, tracking, 'Pending', 'Pathao');
+        await saveTrackingLocally(order.id, tracking, 'Pending', 'Pathao', {
+            name: order.customer.name,
+            phone: order.customer.phone,
+            address: order.address,
+            amount: order.total
+        });
         alert(`Sent to Pathao Successfully! Tracking: ${tracking}`);
         setShowPathaoModal(false);
       } else {
@@ -165,7 +175,12 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
     }
     setIsShipping(true);
     try {
-      const res = await saveTrackingLocally(order.id, manualData.tracking_code, manualData.status, manualData.courier_name);
+      const res = await saveTrackingLocally(order.id, manualData.tracking_code, manualData.status, manualData.courier_name, {
+          name: order.customer.name,
+          phone: order.customer.phone,
+          address: order.address,
+          amount: order.total
+      });
       if (res.status !== "error") {
         setShippingResult({ tracking: manualData.tracking_code, courier: manualData.courier_name });
         alert("Manual Tracking Info Saved Locally!");

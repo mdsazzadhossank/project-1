@@ -64,7 +64,13 @@ export const fetchAllLocalTracking = async (): Promise<any[]> => {
   }
 };
 
-export const saveTrackingLocally = async (orderId: string, trackingCode: string, status: string, courier?: string) => {
+export const saveTrackingLocally = async (
+  orderId: string, 
+  trackingCode: string, 
+  status: string, 
+  courier?: string,
+  customerData?: { name: string; phone: string; address: string; amount: number }
+) => {
   const detectedCourier = courier || identifyCourierByTrackingCode(trackingCode);
   try {
     const response = await fetch(TRACKING_URL, {
@@ -74,7 +80,11 @@ export const saveTrackingLocally = async (orderId: string, trackingCode: string,
         order_id: String(orderId),
         tracking_code: trackingCode,
         status: status,
-        courier_name: detectedCourier 
+        courier_name: detectedCourier,
+        customer_name: customerData?.name,
+        customer_phone: customerData?.phone,
+        customer_address: customerData?.address,
+        amount: customerData?.amount
       })
     });
     return await response.json();
@@ -128,7 +138,12 @@ export const createSteadfastOrder = async (order: Order) => {
 
     const result = await response.json();
     if (result.status === 200 && result.consignment) {
-      await saveTrackingLocally(order.id, result.consignment.tracking_code, result.consignment.status, 'Steadfast');
+      await saveTrackingLocally(order.id, result.consignment.tracking_code, result.consignment.status, 'Steadfast', {
+        name: order.customer.name,
+        phone: order.customer.phone,
+        address: order.address,
+        amount: order.total
+      });
     }
     return result;
   } catch (error) {
