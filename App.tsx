@@ -205,21 +205,13 @@ const App: React.FC = () => {
       setCategories(wpCats);
 
       if (syncedOrders.length > 0) {
-        const uniquePhones = new Set<string>();
-        const customersToSync = syncedOrders.filter(o => {
-          const phone = o.customer.phone?.trim();
-          if (phone && phone.length > 5 && !uniquePhones.has(phone)) {
-            uniquePhones.add(phone);
-            return true;
-          }
-          return false;
-        }).slice(0, 50);
-
-        setSyncProgress({ current: 0, total: customersToSync.length });
+        // Sync every order to backend for counting
+        const ordersToSync = syncedOrders.slice(0, 100);
+        setSyncProgress({ current: 0, total: ordersToSync.length });
         
-        const batchSize = 3;
-        for (let i = 0; i < customersToSync.length; i += batchSize) {
-          const batch = customersToSync.slice(i, i + batchSize);
+        const batchSize = 5;
+        for (let i = 0; i < ordersToSync.length; i += batchSize) {
+          const batch = ordersToSync.slice(i, i + batchSize);
           await Promise.all(
             batch.map(o => syncCustomerWithDB({
               ...o.customer,
@@ -228,8 +220,8 @@ const App: React.FC = () => {
               order_id: o.id
             }))
           );
-          setSyncProgress(prev => prev ? { ...prev, current: Math.min(i + batch.length, customersToSync.length) } : null);
-          await new Promise(resolve => setTimeout(resolve, 100));
+          setSyncProgress(prev => prev ? { ...prev, current: Math.min(i + batch.length, ordersToSync.length) } : null);
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
 
