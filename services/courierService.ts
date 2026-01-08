@@ -7,7 +7,7 @@ const PROXY_URL = "api/courier.php";
 const TRACKING_URL = "api/local_tracking.php";
 const SETTINGS_URL = "api/settings.php";
 
-export const identifyCourierByTrackingCode = (trackingCode: string): 'Steadfast' | 'Pathao' => {
+export const identifyCourierByTrackingCode = (trackingCode: string): 'Steadfast' | 'Pathao' | 'Manual' => {
   if (!trackingCode) return 'Steadfast';
   return /^\d+$/.test(trackingCode) ? 'Pathao' : 'Steadfast';
 };
@@ -65,7 +65,7 @@ export const fetchAllLocalTracking = async (): Promise<any[]> => {
   }
 };
 
-export const saveTrackingLocally = async (orderId: string, trackingCode: string, status: string, courier?: 'Steadfast' | 'Pathao') => {
+export const saveTrackingLocally = async (orderId: string, trackingCode: string, status: string, courier?: string) => {
   const detectedCourier = courier || identifyCourierByTrackingCode(trackingCode);
   try {
     const response = await fetch(TRACKING_URL, {
@@ -181,7 +181,7 @@ export const syncOrderStatusWithCourier = async (orders: Order[]) => {
       updatedOrders[i] = {
         ...updatedOrders[i],
         status: currentStatus,
-        courier_name: courier as 'Steadfast' | 'Pathao',
+        courier_name: courier,
         courier_tracking_code: trackingInfo.courier_tracking_code,
         courier_status: courierStatus
       };
