@@ -21,7 +21,9 @@ import {
   MapPin,
   CircleDollarSign,
   FileText,
-  AlertTriangle
+  AlertTriangle,
+  Edit3,
+  CheckCircle
 } from 'lucide-react';
 import { 
   getCourierBalance, 
@@ -43,6 +45,15 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
   const [loading, setLoading] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Manual Entry States
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualData, setManualData] = useState({
+    order_id: '',
+    courier_name: '',
+    tracking_code: '',
+    status: 'Shipping'
+  });
   
   const loadData = async () => {
     setLoading(true);
@@ -103,11 +114,7 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
   const recentConsignments = useMemo(() => {
     let filtered = orders.filter(o => {
       if (!o.courier_tracking_code) return false;
-      
-      // 1. If courier_name exists, strictly filter by it
       if (o.courier_name) return o.courier_name === activeCourier;
-      
-      // 2. If courier_name is missing, use smart detection as fallback
       const detected = identifyCourierByTrackingCode(o.courier_tracking_code);
       return detected === activeCourier;
     });
@@ -133,6 +140,28 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
 
   const themeText = activeCourier === 'Steadfast' ? 'text-orange-600' : 'text-red-600';
 
+  const handleManualSubmit = async () => {
+    if (!manualData.order_id || !manualData.tracking_code || !manualData.courier_name) {
+      alert("Please fill all required fields.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await saveTrackingLocally(manualData.order_id, manualData.tracking_code, manualData.status, manualData.courier_name);
+      if (res.status !== "error") {
+        alert("Manual Entry Saved!");
+        setShowManualModal(false);
+        loadData();
+      } else {
+        alert("Failed to save. Check order ID.");
+      }
+    } catch (e) {
+      alert("Error occurred while saving.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       <div className="flex p-1.5 bg-white rounded-2xl border border-gray-100 shadow-sm w-fit">
@@ -157,6 +186,15 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
         </div>
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <button 
+            onClick={() => {
+              setManualData(prev => ({ ...prev, courier_name: activeCourier }));
+              setShowManualModal(true);
+            }}
+            className="px-5 py-2.5 bg-white border border-orange-200 text-orange-600 hover:bg-orange-50 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm"
+          >
+            <Edit3 size={18} /> Manual Entry
+          </button>
+          <button 
             disabled={loading}
             onClick={loadData}
             className="px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 hover:text-orange-600 transition-all flex items-center gap-2 text-sm font-bold shadow-sm"
@@ -165,6 +203,69 @@ export const CourierDashboardView: React.FC<{ orders: Order[]; onRefresh?: () =>
           </button>
         </div>
       </div>
+
+      {/* Manual Entry Modal */}
+      {showManualModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-gray-50 bg-gray-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-gray-800">Add Courier Data</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Manual Link Tracking ID</p>
+              </div>
+              <button onClick={() => setShowManualModal(false)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-5">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Order ID (Invoice)</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 12543"
+                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.order_id}
+                    onChange={(e) => setManualData({...manualData, order_id: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Courier Name</label>
+                  <input 
+                    type="text" 
+                    placeholder="Steadfast, Pathao, RedX etc."
+                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.courier_name}
+                    onChange={(e) => setManualData({...manualData, courier_name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Tracking ID</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter consignment number"
+                    className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-[1.5rem] text-sm font-bold outline-none focus:border-orange-500 focus:bg-white transition-all shadow-inner"
+                    value={manualData.tracking_code}
+                    onChange={(e) => setManualData({...manualData, tracking_code: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  onClick={handleManualSubmit}
+                  disabled={loading}
+                  className="w-full py-5 bg-orange-600 text-white font-black rounded-[2rem] text-xs uppercase tracking-widest shadow-xl shadow-orange-100 hover:bg-orange-700 transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                  Link Tracking Data
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!isConfigured && (
         <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex items-center gap-4 text-amber-800 shadow-sm">

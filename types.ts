@@ -54,7 +54,7 @@ export interface Order {
   statusHistory: OrderStatusHistory;
   courier_tracking_code?: string;
   courier_status?: string;
-  courier_name?: string; // Changed from fixed union to string for manual flexibility
+  courier_name?: string;
 }
 
 export interface Expense {

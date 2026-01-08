@@ -165,26 +165,17 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
     }
     setIsShipping(true);
     try {
-      const res = await saveTrackingLocally(
-        order.id, 
-        manualData.tracking_code, 
-        manualData.status, 
-        manualData.courier_name
-      );
-      
+      const res = await saveTrackingLocally(order.id, manualData.tracking_code, manualData.status, manualData.courier_name);
       if (res.status !== "error") {
-        setShippingResult({
-          tracking: manualData.tracking_code,
-          courier: manualData.courier_name
-        });
+        setShippingResult({ tracking: manualData.tracking_code, courier: manualData.courier_name });
+        alert("Manual Tracking Info Saved Locally!");
         setShowManualModal(false);
-        alert("Manual tracking added successfully!");
       } else {
-        alert("Failed to save local tracking.");
+        alert("Failed to save tracking info.");
       }
     } catch (e) {
       console.error(e);
-      alert("Error saving manual entry.");
+      alert("Error occurred while saving.");
     } finally {
       setIsShipping(false);
     }
@@ -325,7 +316,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
                 <Edit3 className="text-orange-600" size={20} />
                 <div>
                   <h3 className="font-bold text-gray-800">Manual Courier Entry</h3>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">Enter details for Order ID: {order.id}</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Set tracking for Order #{order.id}</p>
                 </div>
               </div>
               <button onClick={() => setShowManualModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
@@ -335,38 +326,38 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
             
             <div className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Courier Name</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Courier Name</label>
                 <input 
                   type="text" 
                   placeholder="e.g. RedX, Sundarban, Paperfly"
-                  className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500"
+                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
                   value={manualData.courier_name}
                   onChange={(e) => setManualData({...manualData, courier_name: e.target.value})}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Tracking ID</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tracking ID / Consignment ID</label>
                 <input 
                   type="text" 
                   placeholder="Enter tracking number"
-                  className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500"
+                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
                   value={manualData.tracking_code}
                   onChange={(e) => setManualData({...manualData, tracking_code: e.target.value})}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Initial Status</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Status</label>
                 <select 
-                  className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500"
+                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
                   value={manualData.status}
                   onChange={(e) => setManualData({...manualData, status: e.target.value})}
                 >
                   <option value="Shipping">Shipping</option>
                   <option value="Packaging">Packaging</option>
                   <option value="Delivered">Delivered</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Returned">Returned</option>
                 </select>
               </div>
 
@@ -378,7 +369,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
                   className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isShipping ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-                  Save Tracking
+                  Save Info
                 </button>
               </div>
             </div>
@@ -470,7 +461,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
             <h3 className="text-sm font-bold text-gray-700">Order Item</h3>
             {shippingResult && (
               <a 
-                href={shippingResult.courier === 'Pathao' ? '#' : shippingResult.courier === 'Steadfast' ? `https://steadfast.com.bd/tracking/${shippingResult.tracking}` : '#'} 
+                href={shippingResult.courier === 'Pathao' ? '#' : `https://steadfast.com.bd/tracking/${shippingResult.tracking}`} 
                 target="_blank" 
                 rel="noreferrer"
                 className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"

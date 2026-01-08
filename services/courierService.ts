@@ -1,13 +1,12 @@
 
 import { CourierConfig, Order } from "../types";
-// Removed non-existent import getPathaoOrderStatus
 import { mapPathaoEventToStatus } from "./pathaoService";
 
 const PROXY_URL = "api/courier.php";
 const TRACKING_URL = "api/local_tracking.php";
 const SETTINGS_URL = "api/settings.php";
 
-export const identifyCourierByTrackingCode = (trackingCode: string): 'Steadfast' | 'Pathao' | 'Manual' => {
+export const identifyCourierByTrackingCode = (trackingCode: string): string => {
   if (!trackingCode) return 'Steadfast';
   return /^\d+$/.test(trackingCode) ? 'Pathao' : 'Steadfast';
 };
@@ -167,11 +166,9 @@ export const syncOrderStatusWithCourier = async (orders: Order[]) => {
       let currentStatus = order.status;
       let courierStatus = trackingInfo.courier_status;
 
-      // Special handling for Pathao events via webhook
       if (courier === 'Pathao' && courierStatus) {
         currentStatus = mapPathaoEventToStatus(courierStatus);
       } else if (courierStatus) {
-        // Fallback for Steadfast polling
         const cs = courierStatus.toLowerCase();
         if (cs.includes('delivered')) currentStatus = 'Delivered';
         else if (cs.includes('cancelled')) currentStatus = 'Cancelled';
