@@ -16,8 +16,7 @@ import {
   ExternalLink,
   ChevronDown,
   X,
-  Map,
-  Edit3
+  Map
 } from 'lucide-react';
 import { Order } from '../types';
 import { createSteadfastOrder, saveTrackingLocally } from '../services/courierService';
@@ -41,14 +40,6 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
   const [areas, setAreas] = useState<any[]>([]);
   const [selectedLoc, setSelectedLoc] = useState({ city: 0, zone: 0, area: 0 });
   const [loadingLoc, setLoadingLoc] = useState(false);
-
-  // Manual Modal State
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [manualData, setManualData] = useState({
-    courier_name: '',
-    tracking_code: '',
-    status: 'Shipping'
-  });
 
   useEffect(() => {
     if (showPathaoModal) {
@@ -120,12 +111,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
           tracking: res.consignment.tracking_code,
           courier: 'Steadfast'
         });
-        await saveTrackingLocally(order.id, res.consignment.tracking_code, res.consignment.status, 'Steadfast', {
-            name: order.customer.name,
-            phone: order.customer.phone,
-            address: order.address,
-            amount: order.total
-        });
+        await saveTrackingLocally(order.id, res.consignment.tracking_code, res.consignment.status, 'Steadfast');
         alert("Sent to Steadfast Courier Successfully!");
       } else {
         alert("Error: " + (res.message || "Failed to create consignment"));
@@ -149,12 +135,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
       if (res.data && res.data.consignment_id) {
         const tracking = res.data.consignment_id;
         setShippingResult({ tracking, courier: 'Pathao' });
-        await saveTrackingLocally(order.id, tracking, 'Pending', 'Pathao', {
-            name: order.customer.name,
-            phone: order.customer.phone,
-            address: order.address,
-            amount: order.total
-        });
+        await saveTrackingLocally(order.id, tracking, 'Pending', 'Pathao');
         alert(`Sent to Pathao Successfully! Tracking: ${tracking}`);
         setShowPathaoModal(false);
       } else {
@@ -163,34 +144,6 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
       }
     } catch (e: any) {
       alert("Pathao Error: " + e.message);
-    } finally {
-      setIsShipping(false);
-    }
-  };
-
-  const handleManualSubmit = async () => {
-    if (!manualData.courier_name || !manualData.tracking_code) {
-      alert("Please enter Courier Name and Tracking Code.");
-      return;
-    }
-    setIsShipping(true);
-    try {
-      const res = await saveTrackingLocally(order.id, manualData.tracking_code, manualData.status, manualData.courier_name, {
-          name: order.customer.name,
-          phone: order.customer.phone,
-          address: order.address,
-          amount: order.total
-      });
-      if (res.status !== "error") {
-        setShippingResult({ tracking: manualData.tracking_code, courier: manualData.courier_name });
-        alert("Manual Tracking Info Saved Locally!");
-        setShowManualModal(false);
-      } else {
-        alert("Failed to save tracking info.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error occurred while saving.");
     } finally {
       setIsShipping(false);
     }
@@ -235,10 +188,6 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
                     </button>
                     <button onClick={() => setShowPathaoModal(true)} className="w-full px-4 py-2.5 text-left text-xs font-bold text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2">
                       <Truck size={14} /> Pathao Courier
-                    </button>
-                    <div className="border-t border-gray-50 my-1"></div>
-                    <button onClick={() => setShowManualModal(true)} className="w-full px-4 py-2.5 text-left text-xs font-bold text-orange-600 hover:bg-orange-50 flex items-center gap-2">
-                      <Edit3 size={14} /> Manual Entry
                     </button>
                   </div>
                 )}
@@ -321,76 +270,6 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
           </div>
         </div>
       </div>
-
-      {/* Manual Entry Modal */}
-      {showManualModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-orange-50/50">
-              <div className="flex items-center gap-2">
-                <Edit3 className="text-orange-600" size={20} />
-                <div>
-                  <h3 className="font-bold text-gray-800">Manual Courier Entry</h3>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Set tracking for Order #{order.id}</p>
-                </div>
-              </div>
-              <button onClick={() => setShowManualModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Courier Name</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. RedX, Sundarban, Paperfly"
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
-                  value={manualData.courier_name}
-                  onChange={(e) => setManualData({...manualData, courier_name: e.target.value})}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tracking ID / Consignment ID</label>
-                <input 
-                  type="text" 
-                  placeholder="Enter tracking number"
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
-                  value={manualData.tracking_code}
-                  onChange={(e) => setManualData({...manualData, tracking_code: e.target.value})}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Status</label>
-                <select 
-                  className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm outline-none focus:border-orange-500"
-                  value={manualData.status}
-                  onChange={(e) => setManualData({...manualData, status: e.target.value})}
-                >
-                  <option value="Shipping">Shipping</option>
-                  <option value="Packaging">Packaging</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Returned">Returned</option>
-                </select>
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button onClick={() => setShowManualModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
-                <button 
-                  onClick={handleManualSubmit}
-                  disabled={isShipping}
-                  className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isShipping ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
-                  Save Info
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Pathao Modal */}
       {showPathaoModal && (

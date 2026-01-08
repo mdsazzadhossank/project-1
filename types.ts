@@ -54,7 +54,7 @@ export interface Order {
   statusHistory: OrderStatusHistory;
   courier_tracking_code?: string;
   courier_status?: string;
-  courier_name?: string;
+  courier_name?: 'Steadfast' | 'Pathao';
 }
 
 export interface Expense {
