@@ -31,7 +31,8 @@ import { fetchOrdersFromWP, fetchProductsFromWP, getWPConfig, fetchCategoriesFro
 import { syncOrderStatusWithCourier } from './services/courierService';
 import { getExpenses, saveExpenses } from './services/expenseService';
 import { fetchCustomersFromDB, syncCustomerWithDB } from './services/customerService';
-import { DashboardStats, Order, InventoryProduct, Customer, Expense } from './types';
+import { getSMSConfig, getSMSAutomationConfig, sendActualSMS } from './services/smsService';
+import { DashboardStats, Order, InventoryProduct, Customer, Expense, SMSAutomationConfig } from './types';
 
 const DashboardContent: React.FC<{ 
   stats: DashboardStats; 
@@ -205,7 +206,6 @@ const App: React.FC = () => {
       setCategories(wpCats);
 
       if (syncedOrders.length > 0) {
-        // Sync every order to backend for counting
         const ordersToSync = syncedOrders.slice(0, 100);
         setSyncProgress({ current: 0, total: ordersToSync.length });
         
@@ -252,6 +252,36 @@ const App: React.FC = () => {
   useEffect(() => {
     loadAllData();
   }, []);
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    
+    // Automation Logic
+    try {
+      const [smsConfig, autoConfig] = await Promise.all([getSMSConfig(), getSMSAutomationConfig()]);
+      const order = orders.find(o => o.id === orderId);
+      
+      if (order && smsConfig && autoConfig && autoConfig[newStatus] && autoConfig[newStatus].enabled) {
+        const { template } = autoConfig[newStatus];
+        const firstName = order.customer.name.split(' ')[0] || 'Customer';
+        
+        const finalMsg = template
+          .replace(/\[name\]/g, firstName)
+          .replace(/\[order_id\]/g, order.id)
+          .replace(/\[tracking_code\]/g, order.courier_tracking_code || 'Processing');
+        
+        console.log(`Sending auto SMS to ${order.customer.phone}: ${finalMsg}`);
+        const res = await sendActualSMS(smsConfig, order.customer.phone, finalMsg);
+        if (res.success) {
+          console.log("Auto SMS sent successfully");
+        } else {
+          console.warn("Auto SMS failed:", res.message);
+        }
+      }
+    } catch (e) {
+      console.error("SMS Automation failed:", e);
+    }
+  };
 
   const handleAddExpense = async (data: Omit<Expense, 'id' | 'timestamp'>) => {
     const newExpense: Expense = {
@@ -305,10 +335,6 @@ const App: React.FC = () => {
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
     setActivePage('order-detail');
-  };
-
-  const handleUpdateOrderStatus = (orderId: string, newStatus: Order['status']) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
   };
 
   const renderContent = () => {

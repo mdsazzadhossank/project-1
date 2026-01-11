@@ -20,9 +20,14 @@ import {
   History,
   AlertTriangle,
   CheckCircle,
-  ClipboardList
+  ClipboardList,
+  Zap,
+  ToggleRight,
+  ToggleLeft,
+  Smartphone,
+  Hash
 } from 'lucide-react';
-import { Customer, Order, InventoryProduct } from '../types';
+import { Customer, Order, InventoryProduct, SMSAutomationConfig } from '../types';
 import { 
   generateSMSTemplate, 
   getSMSConfig, 
@@ -31,7 +36,9 @@ import {
   sendActualSMS,
   getCustomTemplates,
   saveCustomTemplates,
-  SMSTemplate
+  SMSTemplate,
+  getSMSAutomationConfig,
+  saveSMSAutomationConfig
 } from '../services/smsService';
 
 interface BulkSMSViewProps {
@@ -49,7 +56,7 @@ interface SendLog {
 }
 
 export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, products, initialTargetPhone }) => {
-  const [activeTab, setActiveTab] = useState<'database' | 'manual'>('database');
+  const [activeTab, setActiveTab] = useState<'database' | 'manual' | 'automation'>('database');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedOrderCount, setSelectedOrderCount] = useState<string>('All');
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set<string>());
@@ -64,32 +71,55 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
   const [showConfig, setShowConfig] = useState(false);
   const [sendLogs, setSendLogs] = useState<SendLog[]>([]);
   const [smsConfig, setSmsConfig] = useState<SMSConfig>({ endpoint: 'https://sms.mram.com.bd/smsapi', apiKey: '', senderId: '' });
+  
+  // Automation States
+  const [automationConfig, setAutomationConfig] = useState<SMSAutomationConfig | null>(null);
+  const [isSavingAutomation, setIsSavingAutomation] = useState(false);
 
   const messageAreaRef = useRef<HTMLTextAreaElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const [savedConfig, savedTemplates] = await Promise.all([
+      const [savedConfig, savedTemplates, autoConfig] = await Promise.all([
         getSMSConfig(),
-        getCustomTemplates()
+        getCustomTemplates(),
+        getSMSAutomationConfig()
       ]);
       if (savedConfig) setSmsConfig(savedConfig);
       if (savedTemplates) setTemplates(savedTemplates);
+      setAutomationConfig(autoConfig);
     };
     loadData();
 
-    // If navigated from customers page with a specific phone
     if (initialTargetPhone) {
       setSelectedPhones(new Set([initialTargetPhone]));
     }
   }, [initialTargetPhone]);
 
-  useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [sendLogs]);
+  const handleSaveAutomation = async () => {
+    if (!automationConfig) return;
+    setIsSavingAutomation(true);
+    await saveSMSAutomationConfig(automationConfig);
+    setIsSavingAutomation(false);
+    alert("অটোমেশন সেটিংস সফলভাবে সেভ হয়েছে!");
+  };
+
+  const updateAutomationStatus = (status: keyof SMSAutomationConfig, enabled: boolean) => {
+    if (!automationConfig) return;
+    setAutomationConfig({
+      ...automationConfig,
+      [status]: { ...automationConfig[status], enabled }
+    });
+  };
+
+  const updateAutomationTemplate = (status: keyof SMSAutomationConfig, template: string) => {
+    if (!automationConfig) return;
+    setAutomationConfig({
+      ...automationConfig,
+      [status]: { ...automationConfig[status], template }
+    });
+  };
 
   const smsStats = useMemo(() => {
     if (!message) return { count: 0, segments: 1, isUnicode: false };
@@ -169,6 +199,18 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
     }
   };
 
+  const handleAISuggestAutomation = async (status: string) => {
+    setIsGenerating(true);
+    try {
+      const text = await generateSMSTemplate(`Order status updated to ${status}`, "BdCommerce");
+      updateAutomationTemplate(status as any, text);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const handleSaveTemplate = async () => {
     if (!newTemplate.name || !newTemplate.content) return;
     const updated = [...templates, { ...newTemplate, id: Date.now().toString() }];
@@ -178,21 +220,8 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
     setShowTemplateModal(false);
   };
 
-  const insertNameTag = () => {
-    if (messageAreaRef.current) {
-      const start = messageAreaRef.current.selectionStart;
-      const end = messageAreaRef.current.selectionEnd;
-      const newMessage = message.substring(0, start) + "[name]" + message.substring(end);
-      setMessage(newMessage);
-      setTimeout(() => {
-        if (messageAreaRef.current) {
-          messageAreaRef.current.focus();
-          messageAreaRef.current.selectionStart = messageAreaRef.current.selectionEnd = start + 6;
-        }
-      }, 0);
-    } else {
-      setMessage(message + "[name]");
-    }
+  const insertTag = (tag: string, currentText: string, setter: (val: string) => void) => {
+    setter(currentText + tag);
   };
 
   const handleSendSMS = async () => {
@@ -238,10 +267,12 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           <button onClick={() => setShowConfig(true)} className="p-2.5 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-orange-600 transition-all flex items-center gap-2 text-sm font-medium shadow-sm">
             <Settings size={18} /> API Config
           </button>
-          <div className="px-4 py-2 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2">
-            <Users size={16} className="text-orange-600" />
-            <span className="text-sm font-bold text-orange-600">{selectedPhones.size} Selected</span>
-          </div>
+          {activeTab !== 'automation' && (
+            <div className="px-4 py-2 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2">
+              <Users size={16} className="text-orange-600" />
+              <span className="text-sm font-bold text-orange-600">{selectedPhones.size} Selected</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -258,9 +289,10 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           <div className="flex border-b border-gray-100 bg-gray-50/50">
             <button onClick={() => { setActiveTab('database'); setSelectedPhones(new Set()); }} className={`flex-1 py-4 text-xs font-bold uppercase transition-all ${activeTab === 'database' ? 'text-orange-600 bg-white border-b-2 border-orange-600' : 'text-gray-400'}`}>Database</button>
             <button onClick={() => { setActiveTab('manual'); setSelectedPhones(new Set()); }} className={`flex-1 py-4 text-xs font-bold uppercase transition-all ${activeTab === 'manual' ? 'text-orange-600 bg-white border-b-2 border-orange-600' : 'text-gray-400'}`}>Manual Input</button>
+            <button onClick={() => setActiveTab('automation')} className={`flex-1 py-4 text-xs font-bold uppercase transition-all ${activeTab === 'automation' ? 'text-orange-600 bg-white border-b-2 border-orange-600' : 'text-gray-400'}`}>Automation</button>
           </div>
 
-          {activeTab === 'database' ? (
+          {activeTab === 'database' && (
             <div className="flex-1 overflow-hidden flex flex-col">
               <div className="p-4 bg-gray-50/30 border-b border-gray-100 grid grid-cols-2 md:grid-cols-2 gap-3">
                 <div className="relative">
@@ -320,7 +352,9 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
                 </table>
               </div>
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'manual' && (
             <div className="p-6 flex flex-col h-full space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-gray-400 uppercase">Input numbers</h4>
@@ -330,6 +364,56 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
               <button onClick={toggleSelectManualAll} className="w-full py-4 bg-gray-800 text-white rounded-xl font-bold shadow-lg hover:bg-gray-900 transition-all active:scale-[0.98]">
                 {selectedPhones.size === manualParsedNumbers.length && manualParsedNumbers.length > 0 ? 'Deselect All' : `Select All ${manualParsedNumbers.length} Numbers`}
               </button>
+            </div>
+          )}
+
+          {activeTab === 'automation' && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+               <div className="p-4 border-b border-gray-100 bg-orange-50/30 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Zap size={18} className="text-orange-600" />
+                    <h4 className="text-sm font-bold text-gray-800">Status Change Automation</h4>
+                  </div>
+                  <button onClick={handleSaveAutomation} disabled={isSavingAutomation} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-bold shadow-md hover:bg-orange-700 disabled:opacity-50">
+                    {isSavingAutomation ? 'Saving...' : 'Save Settings'}
+                  </button>
+               </div>
+               <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                  {automationConfig && (Object.keys(automationConfig) as Array<keyof SMSAutomationConfig>).map((status) => (
+                    <div key={status} className={`p-4 rounded-2xl border transition-all ${automationConfig[status].enabled ? 'bg-white border-orange-200 shadow-md' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
+                      <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-3">
+                           <div className={`p-2 rounded-lg ${automationConfig[status].enabled ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-400'}`}>
+                              <Layers size={16} />
+                           </div>
+                           <span className="font-bold text-gray-800">{status} Status Message</span>
+                        </div>
+                        <button onClick={() => updateAutomationStatus(status, !automationConfig[status].enabled)} className={`transition-colors ${automationConfig[status].enabled ? 'text-orange-600' : 'text-gray-400'}`}>
+                          {automationConfig[status].enabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                        </button>
+                      </div>
+                      
+                      {automationConfig[status].enabled && (
+                        <div className="space-y-3 animate-in slide-in-from-top-2">
+                          <textarea 
+                            value={automationConfig[status].template}
+                            onChange={(e) => updateAutomationTemplate(status, e.target.value)}
+                            className="w-full h-24 p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:border-orange-500 resize-none"
+                            placeholder="Message content..."
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => updateAutomationTemplate(status, automationConfig[status].template + "[name]")} className="text-[9px] font-bold px-2 py-1 bg-white border border-gray-200 rounded hover:bg-orange-50 transition-all">[name]</button>
+                            <button onClick={() => updateAutomationTemplate(status, automationConfig[status].template + "[order_id]")} className="text-[9px] font-bold px-2 py-1 bg-white border border-gray-200 rounded hover:bg-orange-50 transition-all">[order_id]</button>
+                            <button onClick={() => updateAutomationTemplate(status, automationConfig[status].template + "[tracking_code]")} className="text-[9px] font-bold px-2 py-1 bg-white border border-gray-200 rounded hover:bg-orange-50 transition-all">[tracking_code]</button>
+                            <button onClick={() => handleAISuggestAutomation(status)} className="ml-auto flex items-center gap-1 text-[9px] font-bold text-orange-600 hover:underline">
+                               <Wand2 size={10} /> AI Suggest
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+               </div>
             </div>
           )}
         </div>
@@ -367,7 +451,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
               <div className="relative">
                 <textarea ref={messageAreaRef} value={message} onChange={e => setMessage(e.target.value)} placeholder="Type your message here..." className="w-full h-44 p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none resize-none pb-14 focus:ring-1 focus:ring-orange-500 focus:bg-white transition-all shadow-inner" />
                 <div className="absolute bottom-3 left-3 flex gap-2">
-                  <button onClick={insertNameTag} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-orange-600 shadow-sm flex items-center gap-1.5 hover:bg-orange-50 transition-all">
+                  <button onClick={() => insertTag("[name]", message, setMessage)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-orange-600 shadow-sm flex items-center gap-1.5 hover:bg-orange-50 transition-all">
                     <User size={12} /> Add [name]
                   </button>
                   <button onClick={handleAISuggest} disabled={isGenerating} className="px-3 py-1.5 bg-orange-600 text-white rounded-lg text-[10px] font-bold shadow-sm flex items-center gap-1.5 hover:bg-orange-700 disabled:opacity-50 transition-all">

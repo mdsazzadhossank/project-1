@@ -91,3 +91,18 @@ export interface PathaoConfig {
   isSandbox: boolean;
   webhookSecret?: string;
 }
+
+export interface SMSAutomationStatus {
+  enabled: boolean;
+  template: string;
+}
+
+export interface SMSAutomationConfig {
+  Pending: SMSAutomationStatus;
+  Packaging: SMSAutomationStatus;
+  Shipping: SMSAutomationStatus;
+  Delivered: SMSAutomationStatus;
+  Cancelled: SMSAutomationStatus;
+  Returned: SMSAutomationStatus;
+  Rejected: SMSAutomationStatus;
+}
