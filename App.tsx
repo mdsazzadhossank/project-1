@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { StatCard } from './components/StatCard';
@@ -31,8 +31,8 @@ import { fetchOrdersFromWP, fetchProductsFromWP, getWPConfig, fetchCategoriesFro
 import { syncOrderStatusWithCourier } from './services/courierService';
 import { getExpenses, saveExpenses } from './services/expenseService';
 import { fetchCustomersFromDB, syncCustomerWithDB } from './services/customerService';
-import { getSMSConfig, getSMSAutomationConfig, sendActualSMS } from './services/smsService';
-import { DashboardStats, Order, InventoryProduct, Customer, Expense, SMSAutomationConfig } from './types';
+import { triggerAutomationSMS } from './services/smsService';
+import { DashboardStats, Order, InventoryProduct, Customer, Expense } from './types';
 
 const DashboardContent: React.FC<{ 
   stats: DashboardStats; 
@@ -152,6 +152,7 @@ const App: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [filterStatus, setFilterStatus] = useState('All');
   const [orders, setOrders] = useState<Order[]>([]);
+  const ordersRef = useRef<Order[]>([]); // Using ref to prevent closure issues in intervals
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [categories, setCategories] = useState<WPCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -174,15 +175,35 @@ const App: React.FC = () => {
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
 
+  // Sync ref with state
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
   const customers = useMemo(() => dbCustomers, [dbCustomers]);
 
-  const loadAllData = async () => {
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!orderToUpdate) return;
+
+    // Update locally
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    
+    // If status actually changed, trigger automation
+    if (orderToUpdate.status !== newStatus) {
+      console.log(`[Manual Update] Status changed for #${orderId} to ${newStatus}`);
+      await triggerAutomationSMS(orderToUpdate, newStatus);
+    }
+  };
+
+  const loadAllData = async (isBackground = false) => {
+    if (!isBackground) setLoadingData(true);
+    
     const config = await getWPConfig();
     if (!config || !config.url || !config.consumerKey) {
       setHasConfig(false);
     }
-    setLoadingData(true);
-    setSyncProgress(null);
+
     try {
       const [wpOrders, wpProducts, dbExpenses, wpCats] = await Promise.all([
         fetchOrdersFromWP(),
@@ -199,13 +220,27 @@ const App: React.FC = () => {
         })
       }));
 
+      // SYNC WITH COURIER
       const syncedOrders = await syncOrderStatusWithCourier(enrichedOrders);
+      
+      // Check for automated status changes to trigger SMS
+      if (ordersRef.current.length > 0) {
+        for (const newOrder of syncedOrders) {
+          const oldOrder = ordersRef.current.find(o => o.id === newOrder.id);
+          // If we detect a status change from courier sync that wasn't there before
+          if (oldOrder && oldOrder.status !== newOrder.status) {
+            console.log(`[Courier Sync] Auto-detected status change for #${newOrder.id}: ${oldOrder.status} -> ${newOrder.status}`);
+            await triggerAutomationSMS(newOrder, newOrder.status);
+          }
+        }
+      }
+
       setOrders(syncedOrders);
       setProducts(wpProducts);
       setExpenses(dbExpenses);
       setCategories(wpCats);
 
-      if (syncedOrders.length > 0) {
+      if (!isBackground && syncedOrders.length > 0) {
         const ordersToSync = syncedOrders.slice(0, 100);
         setSyncProgress({ current: 0, total: ordersToSync.length });
         
@@ -244,44 +279,22 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Sync failed:", err);
     } finally {
-      setLoadingData(false);
-      setSyncProgress(null);
+      if (!isBackground) {
+        setLoadingData(false);
+        setSyncProgress(null);
+      }
     }
   };
 
   useEffect(() => {
     loadAllData();
+    // Auto-sync every 5 minutes
+    const interval = setInterval(() => {
+      console.log("[Auto-Sync] Fetching latest courier updates...");
+      loadAllData(true);
+    }, 300000); 
+    return () => clearInterval(interval);
   }, []);
-
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    
-    // Automation Logic
-    try {
-      const [smsConfig, autoConfig] = await Promise.all([getSMSConfig(), getSMSAutomationConfig()]);
-      const order = orders.find(o => o.id === orderId);
-      
-      if (order && smsConfig && autoConfig && autoConfig[newStatus] && autoConfig[newStatus].enabled) {
-        const { template } = autoConfig[newStatus];
-        const firstName = order.customer.name.split(' ')[0] || 'Customer';
-        
-        const finalMsg = template
-          .replace(/\[name\]/g, firstName)
-          .replace(/\[order_id\]/g, order.id)
-          .replace(/\[tracking_code\]/g, order.courier_tracking_code || 'Processing');
-        
-        console.log(`Sending auto SMS to ${order.customer.phone}: ${finalMsg}`);
-        const res = await sendActualSMS(smsConfig, order.customer.phone, finalMsg);
-        if (res.success) {
-          console.log("Auto SMS sent successfully");
-        } else {
-          console.warn("Auto SMS failed:", res.message);
-        }
-      }
-    } catch (e) {
-      console.error("SMS Automation failed:", e);
-    }
-  };
 
   const handleAddExpense = async (data: Omit<Expense, 'id' | 'timestamp'>) => {
     const newExpense: Expense = {
@@ -340,13 +353,13 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activePage) {
       case 'dashboard':
-        return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={loadAllData} hasConfig={hasConfig} />;
+        return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={() => loadAllData()} hasConfig={hasConfig} />;
       case 'analytics':
         return <AnalyticsView orders={orders} stats={stats} expenses={expenses} />;
       case 'bulk-sms':
         return <BulkSMSView customers={customers} orders={orders} products={products} initialTargetPhone={smsPhoneTarget} />;
       case 'courier':
-        return <CourierDashboardView orders={orders} onRefresh={loadAllData} />;
+        return <CourierDashboardView orders={orders} onRefresh={() => loadAllData()} />;
       case 'expenses':
         return <ExpenseListView expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />;
       case 'customers':
@@ -358,7 +371,7 @@ const App: React.FC = () => {
       case 'all-products':
         return <ProductListView initialProducts={products} />;
       default:
-        return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={loadAllData} hasConfig={hasConfig} />;
+        return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={() => loadAllData()} hasConfig={hasConfig} />;
     }
   };
 

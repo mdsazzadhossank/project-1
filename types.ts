@@ -38,6 +38,11 @@ export interface OrderStatusHistory {
   delivered?: string;
 }
 
+/* Expanded WCStatus to include both standard WooCommerce statuses and internal lifecycle/courier statuses used across the app */
+export type WCStatus = 
+  | 'pending' | 'processing' | 'on-hold' | 'completed' | 'cancelled' | 'refunded' | 'failed'
+  | 'Pending' | 'Packaging' | 'Shipping' | 'Delivered' | 'Returned' | 'Rejected' | 'Cancelled';
+
 export interface Order {
   id: string;
   timestamp: number;
@@ -50,7 +55,7 @@ export interface Order {
   shippingCharge: number;
   discount: number;
   total: number;
-  status: 'Shipping' | 'Rejected' | 'Packaging' | 'Pending' | 'Delivered' | 'Returned' | 'Cancelled';
+  status: WCStatus;
   statusHistory: OrderStatusHistory;
   courier_tracking_code?: string;
   courier_status?: string;
@@ -98,11 +103,11 @@ export interface SMSAutomationStatus {
 }
 
 export interface SMSAutomationConfig {
-  Pending: SMSAutomationStatus;
-  Packaging: SMSAutomationStatus;
-  Shipping: SMSAutomationStatus;
-  Delivered: SMSAutomationStatus;
-  Cancelled: SMSAutomationStatus;
-  Returned: SMSAutomationStatus;
-  Rejected: SMSAutomationStatus;
+  pending: SMSAutomationStatus;
+  processing: SMSAutomationStatus;
+  'on-hold': SMSAutomationStatus;
+  completed: SMSAutomationStatus;
+  cancelled: SMSAutomationStatus;
+  refunded: SMSAutomationStatus;
+  failed: SMSAutomationStatus;
 }

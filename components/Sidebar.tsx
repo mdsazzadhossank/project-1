@@ -106,15 +106,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, status
   };
 
   const orderStatuses = [
-    { label: 'All Order', key: 'All' },
-    { label: 'Pending', key: 'Pending' },
-    { label: 'Order placed', key: 'Pending' },
-    { label: 'Packaging', key: 'Packaging' },
-    { label: 'Shipping', key: 'Shipping' },
-    { label: 'Delivered', key: 'Delivered' },
-    { label: 'Cancelled', key: 'Cancelled' },
-    { label: 'Returned', key: 'Returned' },
-    { label: 'Rejected', key: 'Rejected' },
+    { label: 'All Orders', key: 'All' },
+    { label: 'Pending Payment', key: 'pending' },
+    { label: 'Processing', key: 'processing' },
+    { label: 'On Hold', key: 'on-hold' },
+    { label: 'Completed', key: 'completed' },
+    { label: 'Cancelled', key: 'cancelled' },
+    { label: 'Refunded', key: 'refunded' },
+    { label: 'Failed', key: 'failed' },
   ];
 
   return (

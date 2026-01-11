@@ -1,5 +1,5 @@
 
-import { Order, InventoryProduct } from "../types";
+import { Order, InventoryProduct, WCStatus } from "../types";
 
 export interface WPConfig {
   url: string;
@@ -101,25 +101,16 @@ export const fetchOrdersFromWP = async (): Promise<Order[]> => {
 
     const mappedOrders: Order[] = (Array.isArray(allWcOrders) ? allWcOrders : []).map((wc: any): Order => {
       const tracking = localTracking.find(t => String(t.id) === String(wc.id));
-      let mappedStatus: Order['status'] = 'Pending';
       
+      // Use WordPress original status directly
+      let mappedStatus: WCStatus = wc.status;
+      
+      // If courier tracking overrides it based on shipment progress
       if (tracking && tracking.courier_status) {
         const cs = tracking.courier_status.toLowerCase();
-        if (cs.includes('delivered')) mappedStatus = 'Delivered';
-        else if (cs.includes('cancelled')) mappedStatus = 'Cancelled';
-        else if (cs.includes('return')) mappedStatus = 'Returned';
-        else if (cs === 'pending' || cs === 'hold' || cs === 'packaging') mappedStatus = 'Packaging';
-        else if (cs !== 'unknown') mappedStatus = 'Shipping';
-      } else {
-        switch (wc.status) {
-          case 'processing': mappedStatus = 'Packaging'; break;
-          case 'completed': mappedStatus = 'Delivered'; break;
-          case 'on-hold': mappedStatus = 'Pending'; break;
-          case 'cancelled': mappedStatus = 'Cancelled'; break;
-          case 'refunded': mappedStatus = 'Returned'; break;
-          case 'failed': mappedStatus = 'Rejected'; break;
-          default: mappedStatus = 'Pending';
-        }
+        if (cs.includes('delivered')) mappedStatus = 'completed';
+        else if (cs.includes('cancelled') || cs.includes('reject')) mappedStatus = 'cancelled';
+        else if (cs.includes('return')) mappedStatus = 'refunded';
       }
 
       let detectedCourier = tracking?.courier_name;
@@ -159,46 +150,6 @@ export const fetchOrdersFromWP = async (): Promise<Order[]> => {
         courier_status: tracking?.courier_status || undefined,
         courier_name: (detectedCourier as 'Steadfast' | 'Pathao') || undefined
       };
-    });
-
-    // Handle local tracking entries without specific order data
-    localTracking.forEach(tracking => {
-      const alreadyMapped = mappedOrders.some(o => String(o.id) === String(tracking.id));
-      if (!alreadyMapped) {
-        let mappedStatus: Order['status'] = 'Pending';
-        if (tracking.courier_status) {
-          const cs = tracking.courier_status.toLowerCase();
-          if (cs.includes('delivered')) mappedStatus = 'Delivered';
-          else if (cs.includes('cancelled')) mappedStatus = 'Cancelled';
-          else if (cs.includes('return')) mappedStatus = 'Returned';
-          else mappedStatus = 'Shipping';
-        }
-
-        mappedOrders.push({
-          id: String(tracking.id),
-          timestamp: Date.now(),
-          customer: {
-            name: 'Local Tracking Customer',
-            email: '',
-            phone: '',
-            avatar: `https://ui-avatars.com/api/?name=L&background=random`,
-            orderCount: 0
-          },
-          address: 'Local Tracking Entry',
-          date: new Date().toLocaleString(),
-          paymentMethod: 'Tracking Only',
-          products: [],
-          subtotal: 0,
-          shippingCharge: 0,
-          discount: 0,
-          total: 0,
-          status: mappedStatus,
-          statusHistory: { placed: new Date().toLocaleDateString() },
-          courier_tracking_code: tracking.courier_tracking_code,
-          courier_status: tracking.courier_status,
-          courier_name: tracking.courier_name || ( /^\d+$/.test(tracking.courier_tracking_code) ? 'Pathao' : 'Steadfast' )
-        });
-      }
     });
 
     return mappedOrders.sort((a, b) => b.timestamp - a.timestamp);

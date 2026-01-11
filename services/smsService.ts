@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { SMSAutomationConfig } from "../types";
+import { SMSAutomationConfig, Order, WCStatus } from "../types";
 
 export interface SMSConfig {
   endpoint: string;
@@ -65,33 +65,19 @@ export const saveCustomTemplates = async (templates: SMSTemplate[]) => {
 export const getSMSAutomationConfig = async (): Promise<SMSAutomationConfig> => {
   const config = await fetchSetting('sms_automation_config');
   const defaultConfig: SMSAutomationConfig = {
-    Pending: { enabled: false, template: "Hi [name], your order #[order_id] is pending." },
-    Packaging: { enabled: false, template: "Hi [name], your order #[order_id] is being packed." },
-    Shipping: { enabled: false, template: "Hi [name], your order #[order_id] has been shipped! Tracking: [tracking_code]" },
-    Delivered: { enabled: false, template: "Hi [name], your order #[order_id] was delivered. Thank you!" },
-    Cancelled: { enabled: false, template: "Hi [name], your order #[order_id] has been cancelled." },
-    Returned: { enabled: false, template: "Hi [name], your order #[order_id] has been returned." },
-    Rejected: { enabled: false, template: "Hi [name], your order #[order_id] has been rejected." }
+    pending: { enabled: false, template: "Hi [name], your order #[order_id] is pending payment." },
+    processing: { enabled: false, template: "Hi [name], your order #[order_id] is being processed." },
+    'on-hold': { enabled: false, template: "Hi [name], your order #[order_id] is on hold." },
+    completed: { enabled: false, template: "Hi [name], your order #[order_id] has been completed! Tracking: [tracking_code]" },
+    cancelled: { enabled: false, template: "Hi [name], your order #[order_id] was cancelled." },
+    refunded: { enabled: false, template: "Hi [name], your order #[order_id] has been refunded." },
+    failed: { enabled: false, template: "Hi [name], your order #[order_id] has failed." }
   };
   return config || defaultConfig;
 };
 
 export const saveSMSAutomationConfig = async (config: SMSAutomationConfig) => {
   await saveSetting('sms_automation_config', config);
-};
-
-export const generateSMSTemplate = async (purpose: string, businessName: string): Promise<string> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Create a professional SMS message for "${businessName}". Purpose: "${purpose}". Use [name] for customer name, [order_id] for order id, [tracking_code] for tracking. Short & crisp.`,
-    });
-    return response.text?.trim() || "Hello [name], thank you for shopping with us!";
-  } catch (error) {
-    console.error("Gemini SMS template generation failed:", error);
-    return "Hello [name], check out our new collection!";
-  }
 };
 
 export const sendActualSMS = async (config: SMSConfig, phone: string, message: string): Promise<{success: boolean, message: string}> => {
@@ -125,5 +111,47 @@ export const sendActualSMS = async (config: SMSConfig, phone: string, message: s
   } catch (error: any) {
     console.error("SMS sending failed:", error);
     return { success: false, message: error.message || 'Unknown network error' };
+  }
+};
+
+/**
+ * Triggers the automation SMS based on order status change
+ */
+export const triggerAutomationSMS = async (order: Order, newStatus: Order['status']) => {
+  try {
+    const [config, autoSettings] = await Promise.all([
+      getSMSConfig(),
+      getSMSAutomationConfig()
+    ]);
+
+    if (!config || !config.apiKey) return;
+
+    const setting = autoSettings[newStatus];
+    if (setting && setting.enabled && setting.template) {
+      const firstName = order.customer.name.split(' ')[0] || 'Customer';
+      const message = setting.template
+        .replace(/\[name\]/g, firstName)
+        .replace(/\[order_id\]/g, order.id)
+        .replace(/\[tracking_code\]/g, order.courier_tracking_code || 'Pending');
+
+      console.log(`[SMS Automation] Triggered for Order ${order.id} - Status: ${newStatus}`);
+      return await sendActualSMS(config, order.customer.phone, message);
+    }
+  } catch (e) {
+    console.error("SMS Automation trigger failed:", e);
+  }
+};
+
+export const generateSMSTemplate = async (purpose: string, businessName: string): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Create a professional SMS message for "${businessName}". Purpose: "${purpose}". Use [name] for customer name, [order_id] for order id, [tracking_code] for tracking. Short & crisp.`,
+    });
+    return response.text?.trim() || "Hello [name], thank you for shopping with us!";
+  } catch (error) {
+    console.error("Gemini SMS template generation failed:", error);
+    return "Hello [name], check out our new collection!";
   }
 };

@@ -18,7 +18,7 @@ import {
   X,
   Map
 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, WCStatus } from '../types';
 import { createSteadfastOrder, saveTrackingLocally } from '../services/courierService';
 import { getPathaoCities, getPathaoZones, getPathaoAreas, createPathaoOrder } from '../services/pathaoService';
 
@@ -89,7 +89,8 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
   };
 
   const isStepCompleted = (step: 'placed' | 'packaging' | 'shipping' | 'delivered') => {
-    const statusMap: Record<Order['status'], string[]> = {
+    /* Fixed: Using Partial<Record<WCStatus, string[]>> to handle lifecycle statuses and ensure compatibility with expanded WCStatus union */
+    const statusMap: Partial<Record<WCStatus, string[]>> = {
       'Pending': ['placed'],
       'Packaging': ['placed', 'packaging'],
       'Shipping': ['placed', 'packaging', 'shipping'],

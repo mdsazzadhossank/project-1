@@ -7,7 +7,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { Order } from '../types';
+import { Order, WCStatus } from '../types';
 import { CustomDatePicker } from './CustomDatePicker';
 
 interface OrderDashboardViewProps {
@@ -16,6 +16,10 @@ interface OrderDashboardViewProps {
   onUpdateStatus: (orderId: string, newStatus: Order['status']) => void;
 }
 
+const formatWCStatus = (status: string) => {
+  return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
 const StatusDropdown: React.FC<{ 
   currentStatus: Order['status']; 
   onSelect: (status: Order['status']) => void 
@@ -23,14 +27,14 @@ const StatusDropdown: React.FC<{
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const statuses: Order['status'][] = [
-    'Pending',
-    'Packaging',
-    'Shipping',
-    'Delivered',
-    'Cancelled',
-    'Returned',
-    'Rejected'
+  const statuses: WCStatus[] = [
+    'pending',
+    'processing',
+    'on-hold',
+    'completed',
+    'cancelled',
+    'refunded',
+    'failed'
   ];
 
   useEffect(() => {
@@ -65,7 +69,7 @@ const StatusDropdown: React.FC<{
                 currentStatus === status ? 'text-orange-600 bg-orange-50/50' : 'text-gray-600'
               }`}
             >
-              {status}
+              {formatWCStatus(status)}
             </button>
           ))}
         </div>
@@ -126,14 +130,14 @@ export const OrderDashboardView: React.FC<OrderDashboardViewProps> = ({ orders, 
     return result;
   }, [orders, searchTerm, sortOrder, paymentFilter, dateRange]);
 
-  const getActionStyles = (status: string) => {
+  const getStatusStyles = (status: string) => {
     switch (status) {
-      case 'Shipping': return 'bg-blue-50 text-blue-400 border border-blue-100';
-      case 'Rejected': return 'bg-red-50 text-red-400 border border-red-100';
-      case 'Packaging': return 'bg-orange-50 text-orange-400 border border-orange-100';
-      case 'Delivered': return 'bg-green-50 text-green-500 border border-green-100';
-      case 'Returned': return 'bg-yellow-50 text-yellow-500 border border-yellow-100';
-      case 'Cancelled': return 'bg-gray-100 text-gray-500 border border-gray-200';
+      case 'processing': return 'bg-blue-50 text-blue-400 border border-blue-100';
+      case 'failed': return 'bg-red-50 text-red-400 border border-red-100';
+      case 'on-hold': return 'bg-orange-50 text-orange-400 border border-orange-100';
+      case 'completed': return 'bg-green-50 text-green-500 border border-green-100';
+      case 'refunded': return 'bg-yellow-50 text-yellow-500 border border-yellow-100';
+      case 'cancelled': return 'bg-gray-100 text-gray-500 border border-gray-200';
       default: return 'bg-gray-50 text-gray-400 border border-gray-100';
     }
   };
@@ -237,8 +241,8 @@ export const OrderDashboardView: React.FC<OrderDashboardViewProps> = ({ orders, 
                 <td className="px-6 py-5 text-sm text-gray-700 uppercase">{order.paymentMethod}</td>
                 <td className="px-6 py-5 text-sm font-bold text-gray-800">৳{order.total.toLocaleString()}</td>
                 <td className="px-6 py-5 text-center">
-                  <span className={`inline-block px-8 py-1.5 rounded-md text-xs font-medium min-w-[120px] transition-all ${getActionStyles(order.status)}`}>
-                    {order.status}
+                  <span className={`inline-block px-8 py-1.5 rounded-md text-xs font-medium min-w-[120px] transition-all ${getStatusStyles(order.status)}`}>
+                    {formatWCStatus(order.status)}
                   </span>
                 </td>
                 <td className="px-6 py-5 text-center">
