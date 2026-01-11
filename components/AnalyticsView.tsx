@@ -92,8 +92,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats, exp
   }, [expenses, dateRange]);
 
   const analyticsData = useMemo(() => {
-    // 1. Total Sale = Only Delivered orders money
-    const deliveredOrders = filteredOrders.filter(o => o.status === 'Delivered');
+    // 1. Total Sale = Only Delivered (completed) orders money
+    // Fix: Using lowercase 'completed' as per WCStatus definition
+    const deliveredOrders = filteredOrders.filter(o => o.status === 'completed');
     const totalDeliveredSale = deliveredOrders.reduce((acc, o) => acc + o.total, 0);
     
     // 2. Total Expenses = From the expenses records in the date range
@@ -125,11 +126,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ orders, stats, exp
       expenses: totalExpensesInRange,
       deliveredSale: totalDeliveredSale,
       chartData,
+      // Fix: Mapped internal statuses to standard lowercase WCStatus values
       statusPercentages: {
-        delivered: Math.round((getStatusCount('Delivered') / totalCount) * 100),
-        shipping: Math.round((getStatusCount('Shipping') / totalCount) * 100),
-        cancelled: Math.round((getStatusCount('Cancelled') / totalCount) * 100),
-        returned: Math.round((getStatusCount('Returned') / totalCount) * 100)
+        delivered: Math.round((getStatusCount('completed') / totalCount) * 100),
+        shipping: Math.round((getStatusCount('processing') / totalCount) * 100),
+        cancelled: Math.round((getStatusCount('cancelled') / totalCount) * 100),
+        returned: Math.round((getStatusCount('refunded') / totalCount) * 100)
       }
     };
   }, [filteredOrders, filteredExpenses]);

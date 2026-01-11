@@ -27,7 +27,7 @@ import {
   Smartphone,
   Hash
 } from 'lucide-react';
-import { Customer, Order, InventoryProduct, SMSAutomationConfig } from '../types';
+import { Customer, Order, InventoryProduct, SMSAutomationConfig, WCStatus } from '../types';
 import { 
   generateSMSTemplate, 
   getSMSConfig, 
@@ -54,6 +54,10 @@ interface SendLog {
   message: string;
   time: string;
 }
+
+const formatWCStatus = (status: string) => {
+  return status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
 
 export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, products, initialTargetPhone }) => {
   const [activeTab, setActiveTab] = useState<'database' | 'manual' | 'automation'>('database');
@@ -372,7 +376,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
                <div className="p-4 border-b border-gray-100 bg-orange-50/30 flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <Zap size={18} className="text-orange-600" />
-                    <h4 className="text-sm font-bold text-gray-800">Status Change Automation</h4>
+                    <h4 className="text-sm font-bold text-gray-800">WordPress Status Automation</h4>
                   </div>
                   <button onClick={handleSaveAutomation} disabled={isSavingAutomation} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-xs font-bold shadow-md hover:bg-orange-700 disabled:opacity-50">
                     {isSavingAutomation ? 'Saving...' : 'Save Settings'}
@@ -386,7 +390,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
                            <div className={`p-2 rounded-lg ${automationConfig[status].enabled ? 'bg-orange-100 text-orange-600' : 'bg-gray-200 text-gray-400'}`}>
                               <Layers size={16} />
                            </div>
-                           <span className="font-bold text-gray-800">{status} Status Message</span>
+                           <span className="font-bold text-gray-800">{formatWCStatus(status)} Status Message</span>
                         </div>
                         <button onClick={() => updateAutomationStatus(status, !automationConfig[status].enabled)} className={`transition-colors ${automationConfig[status].enabled ? 'text-orange-600' : 'text-gray-400'}`}>
                           {automationConfig[status].enabled ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
@@ -519,7 +523,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
                 <textarea value={newTemplate.content} onChange={e => setNewTemplate({...newTemplate, content: e.target.value})} className="w-full h-32 p-3 border border-gray-200 rounded-lg text-sm resize-none outline-none focus:border-orange-500 transition-all" />
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setShowTemplateModal(false)} className="flex-1 py-3 bg-gray-50 text-gray-600 font-bold rounded-xl">Cancel</button>
+                <button onClick={() => setShowTemplateModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl">Cancel</button>
                 <button onClick={handleSaveTemplate} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl shadow-md">Save</button>
               </div>
             </div>

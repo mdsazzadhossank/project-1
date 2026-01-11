@@ -38,10 +38,15 @@ export interface OrderStatusHistory {
   delivered?: string;
 }
 
-/* Expanded WCStatus to include both standard WooCommerce statuses and internal lifecycle/courier statuses used across the app */
+/* Standard WooCommerce statuses */
 export type WCStatus = 
-  | 'pending' | 'processing' | 'on-hold' | 'completed' | 'cancelled' | 'refunded' | 'failed'
-  | 'Pending' | 'Packaging' | 'Shipping' | 'Delivered' | 'Returned' | 'Rejected' | 'Cancelled';
+  | 'pending' 
+  | 'processing' 
+  | 'on-hold' 
+  | 'completed' 
+  | 'cancelled' 
+  | 'refunded' 
+  | 'failed';
 
 export interface Order {
   id: string;

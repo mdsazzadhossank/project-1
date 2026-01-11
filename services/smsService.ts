@@ -114,10 +114,7 @@ export const sendActualSMS = async (config: SMSConfig, phone: string, message: s
   }
 };
 
-/**
- * Triggers the automation SMS based on order status change
- */
-export const triggerAutomationSMS = async (order: Order, newStatus: Order['status']) => {
+export const triggerAutomationSMS = async (order: Order, newStatus: WCStatus) => {
   try {
     const [config, autoSettings] = await Promise.all([
       getSMSConfig(),

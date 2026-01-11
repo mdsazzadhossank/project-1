@@ -13,17 +13,18 @@ export const identifyCourierByTrackingCode = (trackingCode: string): 'Steadfast'
 
 /**
  * Maps Steadfast Courier statuses to application internal order statuses
+ * Fix: Mapped internal statuses to standard lowercase WCStatus values
  */
 export const mapSteadfastStatusToInternal = (status: string): Order['status'] => {
   const s = status.toLowerCase();
   
-  if (s.includes('delivered')) return 'Delivered';
-  if (s.includes('cancelled') || s.includes('reject')) return 'Cancelled';
-  if (s.includes('return')) return 'Returned';
-  if (s.includes('transit') || s.includes('shipping') || s.includes('out_for_delivery') || s.includes('picked')) return 'Shipping';
-  if (s.includes('pending') || s.includes('hold') || s.includes('packaging')) return 'Packaging';
+  if (s.includes('delivered')) return 'completed';
+  if (s.includes('cancelled') || s.includes('reject')) return 'cancelled';
+  if (s.includes('return')) return 'refunded';
+  if (s.includes('transit') || s.includes('shipping') || s.includes('out_for_delivery') || s.includes('picked')) return 'processing';
+  if (s.includes('pending') || s.includes('hold') || s.includes('packaging')) return 'on-hold';
   
-  return 'Pending';
+  return 'pending';
 };
 
 const fetchSetting = async (key: string) => {

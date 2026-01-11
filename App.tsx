@@ -32,7 +32,7 @@ import { syncOrderStatusWithCourier } from './services/courierService';
 import { getExpenses, saveExpenses } from './services/expenseService';
 import { fetchCustomersFromDB, syncCustomerWithDB } from './services/customerService';
 import { triggerAutomationSMS } from './services/smsService';
-import { DashboardStats, Order, InventoryProduct, Customer, Expense } from './types';
+import { DashboardStats, Order, InventoryProduct, Customer, Expense, WCStatus } from './types';
 
 const DashboardContent: React.FC<{ 
   stats: DashboardStats; 
@@ -102,10 +102,15 @@ const DashboardContent: React.FC<{
       </div>
 
       <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-        {['Pending', 'Packaging', 'Shipping', 'Delivered'].map((st) => (
-          <div key={st} className="bg-white border border-gray-100 rounded-xl p-6 flex flex-col items-center justify-center text-center gap-2 hover:shadow-lg transition-all cursor-pointer">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{st}</p>
-            <p className="text-2xl font-black text-gray-800">{statusCounts[st] || 0}</p>
+        {[
+          { key: 'processing', label: 'Processing' },
+          { key: 'on-hold', label: 'On Hold' },
+          { key: 'completed', label: 'Completed' },
+          { key: 'cancelled', label: 'Cancelled' }
+        ].map((st) => (
+          <div key={st.key} className="bg-white border border-gray-100 rounded-xl p-6 flex flex-col items-center justify-center text-center gap-2 hover:shadow-lg transition-all cursor-pointer">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{st.label}</p>
+            <p className="text-2xl font-black text-gray-800">{statusCounts[st.key] || 0}</p>
           </div>
         ))}
       </div>
@@ -152,7 +157,7 @@ const App: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [filterStatus, setFilterStatus] = useState('All');
   const [orders, setOrders] = useState<Order[]>([]);
-  const ordersRef = useRef<Order[]>([]); // Using ref to prevent closure issues in intervals
+  const ordersRef = useRef<Order[]>([]); 
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [categories, setCategories] = useState<WPCategory[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -175,24 +180,20 @@ const App: React.FC = () => {
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
 
-  // Sync ref with state
   useEffect(() => {
     ordersRef.current = orders;
   }, [orders]);
 
   const customers = useMemo(() => dbCustomers, [dbCustomers]);
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: WCStatus) => {
     const orderToUpdate = orders.find(o => o.id === orderId);
     if (!orderToUpdate) return;
 
-    // Update locally
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    
-    // If status actually changed, trigger automation
     if (orderToUpdate.status !== newStatus) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       console.log(`[Manual Update] Status changed for #${orderId} to ${newStatus}`);
-      await triggerAutomationSMS(orderToUpdate, newStatus);
+      await triggerAutomationSMS({ ...orderToUpdate, status: newStatus }, newStatus);
     }
   };
 
@@ -220,14 +221,11 @@ const App: React.FC = () => {
         })
       }));
 
-      // SYNC WITH COURIER
       const syncedOrders = await syncOrderStatusWithCourier(enrichedOrders);
       
-      // Check for automated status changes to trigger SMS
       if (ordersRef.current.length > 0) {
         for (const newOrder of syncedOrders) {
           const oldOrder = ordersRef.current.find(o => o.id === newOrder.id);
-          // If we detect a status change from courier sync that wasn't there before
           if (oldOrder && oldOrder.status !== newOrder.status) {
             console.log(`[Courier Sync] Auto-detected status change for #${newOrder.id}: ${oldOrder.status} -> ${newOrder.status}`);
             await triggerAutomationSMS(newOrder, newOrder.status);
@@ -288,9 +286,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadAllData();
-    // Auto-sync every 5 minutes
     const interval = setInterval(() => {
-      console.log("[Auto-Sync] Fetching latest courier updates...");
       loadAllData(true);
     }, 300000); 
     return () => clearInterval(interval);

@@ -54,26 +54,27 @@ export const savePathaoConfig = async (config: PathaoConfig) => {
 
 /**
  * Maps Pathao Webhook events to application internal order statuses
+ * Fix: Mapped internal statuses to standard lowercase WCStatus values
  */
 export const mapPathaoEventToStatus = (event: string): Order['status'] => {
   const e = event.toLowerCase();
   
   // Delivered status
-  if (e.includes('delivered') || e.includes('paid')) return 'Delivered';
+  if (e.includes('delivered') || e.includes('paid')) return 'completed';
   
   // Returned status
-  if (e.includes('returned') || e.includes('failed')) return 'Returned';
+  if (e.includes('returned') || e.includes('failed')) return 'refunded';
   
   // Cancelled/Rejected status
-  if (e.includes('cancelled') || e.includes('rejected')) return 'Rejected';
+  if (e.includes('cancelled') || e.includes('rejected')) return 'cancelled';
   
   // Shipping status
-  if (e.includes('transit') || e.includes('sorting') || e.includes('assigned') || e.includes('picked')) return 'Shipping';
+  if (e.includes('transit') || e.includes('sorting') || e.includes('assigned') || e.includes('picked')) return 'processing';
   
   // Packaging status
-  if (e.includes('created') || e.includes('requested')) return 'Packaging';
+  if (e.includes('created') || e.includes('requested')) return 'on-hold';
   
-  return 'Pending';
+  return 'pending';
 };
 
 async function pathaoRequest(endpoint: string, method: string = 'GET', body: any = null) {

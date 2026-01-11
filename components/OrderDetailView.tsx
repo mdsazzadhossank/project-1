@@ -89,15 +89,15 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
   };
 
   const isStepCompleted = (step: 'placed' | 'packaging' | 'shipping' | 'delivered') => {
-    /* Fixed: Using Partial<Record<WCStatus, string[]>> to handle lifecycle statuses and ensure compatibility with expanded WCStatus union */
+    /* Fixed: Using standard lowercase WCStatus values as keys in Partial<Record<WCStatus, string[]>> */
     const statusMap: Partial<Record<WCStatus, string[]>> = {
-      'Pending': ['placed'],
-      'Packaging': ['placed', 'packaging'],
-      'Shipping': ['placed', 'packaging', 'shipping'],
-      'Delivered': ['placed', 'packaging', 'shipping', 'delivered'],
-      'Returned': ['placed', 'packaging', 'shipping'],
-      'Rejected': ['placed'],
-      'Cancelled': ['placed']
+      'pending': ['placed'],
+      'on-hold': ['placed', 'packaging'],
+      'processing': ['placed', 'packaging', 'shipping'],
+      'completed': ['placed', 'packaging', 'shipping', 'delivered'],
+      'refunded': ['placed', 'packaging', 'shipping'],
+      'cancelled': ['placed'],
+      'failed': ['placed']
     };
     return statusMap[order.status]?.includes(step) || false;
   };
@@ -204,10 +204,9 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
             <Info size={14} />
             Orders in route to the customer destination.
             <div className="ml-auto flex gap-2">
-              {order.status === 'Returned' && <span className="bg-red-50 text-red-500 px-3 py-1 rounded border border-red-100 font-medium uppercase text-[10px]">Returned</span>}
-              {order.status === 'Delivered' && <span className="bg-blue-50 text-blue-500 px-3 py-1 rounded border border-blue-100 font-medium uppercase text-[10px]">Delivered</span>}
-              {order.status === 'Rejected' && <span className="bg-gray-50 text-gray-500 px-3 py-1 rounded border border-gray-100 font-medium uppercase text-[10px]">Rejected</span>}
-              {order.status === 'Cancelled' && <span className="bg-red-100 text-red-700 px-3 py-1 rounded border border-red-200 font-medium uppercase text-[10px]">Cancelled</span>}
+              {order.status === 'refunded' && <span className="bg-red-50 text-red-500 px-3 py-1 rounded border border-red-100 font-medium uppercase text-[10px]">Returned</span>}
+              {order.status === 'completed' && <span className="bg-blue-50 text-blue-500 px-3 py-1 rounded border border-blue-100 font-medium uppercase text-[10px]">Delivered</span>}
+              {order.status === 'cancelled' && <span className="bg-red-100 text-red-700 px-3 py-1 rounded border border-red-200 font-medium uppercase text-[10px]">Cancelled</span>}
             </div>
           </div>
 
@@ -217,10 +216,10 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
             <div 
               className="absolute top-[52px] left-12 h-1 bg-orange-500 transition-all duration-1000"
               style={{ width: 
-                order.status === 'Pending' ? '0%' : 
-                order.status === 'Packaging' ? '33%' : 
-                order.status === 'Shipping' ? '66%' : 
-                order.status === 'Delivered' ? '100%' : '0%' 
+                order.status === 'pending' ? '0%' : 
+                order.status === 'on-hold' ? '33%' : 
+                order.status === 'processing' ? '66%' : 
+                order.status === 'completed' ? '100%' : '0%' 
               }}
             ></div>
             
@@ -329,7 +328,7 @@ export const OrderDetailView: React.FC<OrderDetailViewProps> = ({ order, onBack 
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button onClick={() => setShowPathaoModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+                <button onClick={() => setShowPathaoModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-bold rounded-xl">Cancel</button>
                 <button 
                   onClick={handlePathaoSubmit}
                   disabled={isShipping || !selectedLoc.area}
