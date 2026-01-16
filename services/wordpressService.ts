@@ -239,25 +239,25 @@ export const uploadImageToWP = async (file: File): Promise<string | null> => {
     const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
     const apiBase = `${baseUrl}/wp-json/wp/v2/media`;
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     const auth = btoa(`${consumerKey}:${consumerSecret}`);
 
+    // Sanitize filename to prevent header errors
+    const sanitizedFileName = file.name.replace(/["\r\n]/g, "");
+
+    // WordPress Media API expects raw binary body for image uploads when using Content-Disposition
     const response = await fetch(apiBase, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
-        'Content-Disposition': `attachment; filename="${file.name}"`,
+        'Content-Disposition': `attachment; filename="${sanitizedFileName}"`,
+        'Content-Type': file.type
       },
-      body: formData
+      body: file
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Upload failed", response.status, errorText);
-      // Fallback: Try with query params if header auth failed (rarely works for media POST but worth a try if server configured for it)
-      // Or return null to let UI show error
       return null;
     }
 

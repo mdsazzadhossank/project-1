@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, ChevronDown, Plus, Info, X, Loader2, Image as ImageIcon, CheckCircle, UploadCloud, Box, Tag, Layers, Settings, Save, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Loader2, Image as ImageIcon, UploadCloud, Box, Layers, Settings, Save } from 'lucide-react';
 import { InventoryProduct } from '../types';
 import { fetchCategoriesFromWP, WPCategory, createProductInWP, CreateProductPayload, uploadImageToWP } from '../services/wordpressService';
 
@@ -384,11 +384,11 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                 <button onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
                 <button 
                   onClick={handleCreateProduct}
-                  disabled={isCreating}
+                  disabled={isCreating || uploadingImage}
                   className="px-6 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 transition-all flex items-center gap-2 disabled:opacity-70"
                 >
-                  {isCreating ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  Publish Product
+                  {(uploadingImage || isCreating) ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {uploadingImage ? 'Uploading Image...' : (isCreating ? 'Publishing...' : 'Publish Product')}
                 </button>
               </div>
             </div>
@@ -594,11 +594,11 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                     <button onClick={() => setProductData({...productData, status: 'draft'})} className="text-xs text-gray-500 hover:text-orange-600 underline">Save Draft</button>
                     <button 
                       onClick={handleCreateProduct}
-                      disabled={isCreating}
+                      disabled={isCreating || uploadingImage}
                       className="px-4 py-2 bg-orange-600 text-white rounded text-xs font-bold shadow hover:bg-orange-700 transition-all disabled:opacity-70 flex items-center gap-1"
                     >
                       {uploadingImage ? <Loader2 size={12} className="animate-spin" /> : null}
-                      {isCreating ? 'Publishing...' : 'Publish'}
+                      {uploadingImage ? 'Uploading...' : (isCreating ? 'Publishing...' : 'Publish')}
                     </button>
                   </div>
                 </div>
