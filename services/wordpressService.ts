@@ -237,27 +237,27 @@ export const uploadImageToWP = async (file: File): Promise<string | null> => {
 
     const { url, consumerKey, consumerSecret } = config;
     const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-    const apiBase = `${baseUrl}/wp-json/wp/v2/media`;
+    
+    // Switch to using URL query parameters for authentication to avoid Authorization header stripping issues
+    const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
 
-    const auth = btoa(`${consumerKey}:${consumerSecret}`);
+    // Use FormData which is the standard way to upload files in browser
+    const formData = new FormData();
+    formData.append('file', file);
 
-    // Sanitize filename to prevent header errors
-    const sanitizedFileName = file.name.replace(/["\r\n]/g, "");
-
-    // WordPress Media API expects raw binary body for image uploads when using Content-Disposition
     const response = await fetch(apiBase, {
       method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Disposition': `attachment; filename="${sanitizedFileName}"`,
-        'Content-Type': file.type
-      },
-      body: file
+      // Do not set Content-Type header manually when using FormData, browser sets it with boundary
+      body: formData
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Upload failed", response.status, errorText);
+      try {
+        const errJson = JSON.parse(errorText);
+        console.error("WP Error Message:", errJson.message);
+      } catch (e) {}
       return null;
     }
 
