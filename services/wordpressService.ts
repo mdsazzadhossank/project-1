@@ -38,6 +38,7 @@ export interface CreateProductPayload {
 
 const SETTINGS_URL = "api/settings.php";
 const TRACKING_URL = "api/local_tracking.php";
+const PROXY_UPLOAD_URL = "api/proxy_upload.php";
 
 const fetchSetting = async (key: string) => {
   try {
@@ -227,7 +228,6 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   }
 };
 
-// Return type changed to object to provide more details on failure
 export const uploadImageToWP = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
   try {
     const config = await getWPConfig();
@@ -236,37 +236,40 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
       return { success: false, error: "Settings not configured" };
     }
 
-    const { url, consumerKey, consumerSecret } = config;
-    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-    
-    // Use URL query parameters for authentication to bypass header stripping
-    const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
-
-    // Use FormData which mimics standard form submission and is robust
+    // Use our new PHP Proxy to handle the upload server-side
+    // This bypasses CORS, Mixed Content, and Header Stripping issues
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('url', config.url);
+    formData.append('consumer_key', config.consumerKey);
+    formData.append('consumer_secret', config.consumerSecret);
 
-    const response = await fetch(apiBase, {
+    const response = await fetch(PROXY_UPLOAD_URL, {
       method: 'POST',
       body: formData
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Upload failed", response.status, errorText);
-      let errorMessage = `HTTP ${response.status}`;
-      try {
-        const errJson = JSON.parse(errorText);
-        if (errJson.message) errorMessage = errJson.message;
-        else if (errJson.code) errorMessage = errJson.code;
-      } catch (e) {
-        if (errorText.length < 50) errorMessage = errorText;
-      }
-      return { success: false, error: errorMessage };
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("Proxy response parse error. Raw response:", text);
+      return { success: false, error: "Invalid response from server proxy" };
     }
 
-    const data = await response.json();
-    return { success: true, url: data.source_url };
+    if (!response.ok) {
+      const msg = data.message || data.code || "Upload Failed";
+      console.error("Proxy Upload Error:", msg);
+      return { success: false, error: msg };
+    }
+
+    // WordPress Media API returns the object with source_url
+    if (data.source_url) {
+      return { success: true, url: data.source_url };
+    } else {
+      return { success: false, error: "No image URL returned from WordPress" };
+    }
   } catch (error: any) {
     console.error("Image upload failed:", error);
     return { success: false, error: error.message || "Network Error" };
