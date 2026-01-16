@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronDown, Plus, Info, X, Loader2 } from 'lucide-react';
+import { Search, ChevronDown, Plus, Info, X, Loader2, Image as ImageIcon, CheckCircle, UploadCloud, Box, Tag, Layers, Settings, Save } from 'lucide-react';
 import { InventoryProduct } from '../types';
-import { fetchCategoriesFromWP, WPCategory, getWPConfig } from '../services/wordpressService';
+import { fetchCategoriesFromWP, WPCategory, createProductInWP, CreateProductPayload } from '../services/wordpressService';
 
 interface ProductListViewProps {
   initialProducts?: InventoryProduct[];
@@ -36,6 +36,32 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000000 });
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
+  
+  // Add Product Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [activeTab, setActiveTab] = useState<'general' | 'inventory' | 'shipping'>('general');
+  
+  // Detailed Product State
+  const [productData, setProductData] = useState({
+    name: '',
+    description: '',
+    short_description: '',
+    regular_price: '',
+    sale_price: '',
+    sku: '',
+    stock_status: 'instock',
+    manage_stock: false,
+    stock_quantity: '',
+    weight: '',
+    length: '',
+    width: '',
+    height: '',
+    image_url: '',
+    gallery_urls: [''],
+    selected_categories: [] as number[],
+    status: 'publish'
+  });
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -76,14 +102,22 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     setAllProducts(prev => prev.map(p => p.id === id ? { ...p, status: !p.status } : p));
   };
 
-  const incrementStock = (id: string) => {
-    setAllProducts(prev => prev.map(p => p.id === id ? { ...p, stock: p.stock + 1 } : p));
-  };
-
   const toggleCategory = (cat: string) => {
     setSelectedCategories(prev => 
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     );
+  };
+
+  const toggleProductCategory = (catId: number) => {
+    setProductData(prev => {
+      const exists = prev.selected_categories.includes(catId);
+      return {
+        ...prev,
+        selected_categories: exists 
+          ? prev.selected_categories.filter(id => id !== catId)
+          : [...prev.selected_categories, catId]
+      };
+    });
   };
 
   const clearAllFilters = () => {
@@ -93,13 +127,81 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     setStatusFilter('All');
   };
 
-  const handleAddProduct = async () => {
-    const config = await getWPConfig();
-    if (config && config.url) {
-      const baseUrl = config.url.endsWith('/') ? config.url.slice(0, -1) : config.url;
-      window.open(`${baseUrl}/wp-admin/post-new.php?post_type=product`, '_blank');
-    } else {
-      alert("Please configure your WordPress connection first.");
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productData.name || !productData.regular_price) {
+      alert("Product Name and Regular Price are required!");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      const payload: CreateProductPayload = {
+        name: productData.name,
+        type: 'simple',
+        regular_price: productData.regular_price,
+        description: productData.description,
+        short_description: productData.short_description,
+        status: productData.status as any,
+        categories: productData.selected_categories.map(id => ({ id })),
+        images: [
+          ...(productData.image_url ? [{ src: productData.image_url }] : []),
+          ...productData.gallery_urls.filter(url => url).map(url => ({ src: url }))
+        ]
+      };
+
+      if (productData.sale_price) payload.sale_price = productData.sale_price;
+      if (productData.sku) payload.sku = productData.sku;
+      
+      // Inventory
+      payload.manage_stock = productData.manage_stock;
+      if (productData.manage_stock && productData.stock_quantity) {
+        payload.stock_quantity = parseInt(productData.stock_quantity);
+      }
+      if (productData.stock_status) payload.stock_status = productData.stock_status as any;
+
+      // Shipping
+      if (productData.weight) payload.weight = productData.weight;
+      if (productData.length || productData.width || productData.height) {
+        payload.dimensions = {
+          length: productData.length,
+          width: productData.width,
+          height: productData.height
+        };
+      }
+
+      const result = await createProductInWP(payload);
+      
+      if (result.success && result.product) {
+        const created: InventoryProduct = {
+          id: result.product.id.toString(),
+          name: result.product.name,
+          brand: 'N/A',
+          category: result.product.categories?.[0]?.name || 'Uncategorized',
+          price: parseFloat(result.product.price || '0'),
+          discountPercent: 0,
+          stock: result.product.stock_quantity || 0,
+          status: result.product.status === 'publish',
+          img: result.product.images?.[0]?.src || 'https://via.placeholder.com/150'
+        };
+        
+        setAllProducts(prev => [created, ...prev]);
+        setShowAddModal(false);
+        setProductData({
+          name: '', description: '', short_description: '', regular_price: '', sale_price: '',
+          sku: '', stock_status: 'instock', manage_stock: false, stock_quantity: '',
+          weight: '', length: '', width: '', height: '',
+          image_url: '', gallery_urls: [''], selected_categories: [], status: 'publish'
+        });
+        alert("Product Published Successfully to WordPress!");
+      } else {
+        alert("Error: " + result.message);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to create product");
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -136,8 +238,8 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               </div>
               <button 
-                onClick={handleAddProduct}
-                className="bg-orange-600 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                onClick={() => setShowAddModal(true)}
+                className="bg-orange-600 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-orange-200 hover:bg-orange-700 transition-all"
               >
                 <Plus size={16} /> Add Product
               </button>
@@ -228,6 +330,341 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
           </div>
         </div>
       </div>
+
+      {/* Advanced Add Product Modal - WordPress Style */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-gray-100/90 backdrop-blur-sm z-[200] flex items-start justify-center overflow-y-auto p-4 md:p-8">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl flex flex-col min-h-[85vh] animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20 rounded-t-xl">
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <Box className="text-orange-600" /> Add New Product
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">Create a new product card for your store.</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
+                <button 
+                  onClick={handleCreateProduct}
+                  disabled={isCreating}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 transition-all flex items-center gap-2 disabled:opacity-70"
+                >
+                  {isCreating ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  Publish Product
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 flex flex-col lg:flex-row bg-gray-50">
+              {/* Left Column - Main Content */}
+              <div className="flex-1 p-6 space-y-6">
+                
+                {/* Product Name */}
+                <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Product Name <span className="text-red-500">*</span></label>
+                   <input 
+                     type="text" 
+                     className="w-full p-3 border border-gray-200 rounded-lg text-lg font-medium focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none shadow-sm"
+                     placeholder="Product Name"
+                     value={productData.name}
+                     onChange={e => setProductData({...productData, name: e.target.value})}
+                   />
+                </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Product Description</label>
+                   <textarea 
+                     className="w-full p-4 border border-gray-200 rounded-lg text-sm min-h-[200px] focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none shadow-sm resize-y"
+                     placeholder="Detailed description of the product..."
+                     value={productData.description}
+                     onChange={e => setProductData({...productData, description: e.target.value})}
+                   />
+                </div>
+
+                {/* Product Data Meta Box */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center gap-2">
+                    <Settings size={16} className="text-gray-500" />
+                    <h4 className="font-bold text-gray-700 text-sm">Product Data</h4>
+                    <span className="ml-auto text-xs font-medium text-gray-400 px-2 py-1 bg-white border rounded">Simple product</span>
+                  </div>
+                  
+                  <div className="flex min-h-[250px]">
+                     {/* Tabs */}
+                     <div className="w-40 bg-gray-50 border-r border-gray-200">
+                        <button 
+                          onClick={() => setActiveTab('general')}
+                          className={`w-full text-left px-4 py-3 text-xs font-bold flex items-center gap-2 border-l-4 transition-all ${activeTab === 'general' ? 'bg-white border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <Settings size={14} /> General
+                        </button>
+                        <button 
+                          onClick={() => setActiveTab('inventory')}
+                          className={`w-full text-left px-4 py-3 text-xs font-bold flex items-center gap-2 border-l-4 transition-all ${activeTab === 'inventory' ? 'bg-white border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <Layers size={14} /> Inventory
+                        </button>
+                        <button 
+                          onClick={() => setActiveTab('shipping')}
+                          className={`w-full text-left px-4 py-3 text-xs font-bold flex items-center gap-2 border-l-4 transition-all ${activeTab === 'shipping' ? 'bg-white border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <UploadCloud size={14} /> Shipping
+                        </button>
+                     </div>
+
+                     {/* Tab Content */}
+                     <div className="flex-1 p-6">
+                        {activeTab === 'general' && (
+                          <div className="space-y-4 max-w-md animate-in fade-in">
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">Regular price (৳)</label>
+                                <input 
+                                  type="number" 
+                                  className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none"
+                                  placeholder="0.00"
+                                  value={productData.regular_price}
+                                  onChange={e => setProductData({...productData, regular_price: e.target.value})}
+                                />
+                             </div>
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">Sale price (৳)</label>
+                                <input 
+                                  type="number" 
+                                  className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none"
+                                  placeholder="0.00"
+                                  value={productData.sale_price}
+                                  onChange={e => setProductData({...productData, sale_price: e.target.value})}
+                                />
+                             </div>
+                          </div>
+                        )}
+
+                        {activeTab === 'inventory' && (
+                          <div className="space-y-4 max-w-md animate-in fade-in">
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">SKU</label>
+                                <input 
+                                  type="text" 
+                                  className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none"
+                                  placeholder="SKU-123"
+                                  value={productData.sku}
+                                  onChange={e => setProductData({...productData, sku: e.target.value})}
+                                />
+                             </div>
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">Manage stock?</label>
+                                <div className="col-span-2 flex items-center">
+                                  <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 text-orange-600 rounded"
+                                    checked={productData.manage_stock}
+                                    onChange={e => setProductData({...productData, manage_stock: e.target.checked})}
+                                  />
+                                  <span className="ml-2 text-xs text-gray-500">Enable stock management at product level</span>
+                                </div>
+                             </div>
+                             {productData.manage_stock && (
+                               <div className="grid grid-cols-3 items-center gap-4">
+                                  <label className="text-xs font-bold text-gray-600 text-right">Stock quantity</label>
+                                  <input 
+                                    type="number" 
+                                    className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none"
+                                    value={productData.stock_quantity}
+                                    onChange={e => setProductData({...productData, stock_quantity: e.target.value})}
+                                  />
+                               </div>
+                             )}
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">Stock status</label>
+                                <select 
+                                  className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none bg-white"
+                                  value={productData.stock_status}
+                                  onChange={e => setProductData({...productData, stock_status: e.target.value})}
+                                >
+                                  <option value="instock">In stock</option>
+                                  <option value="outofstock">Out of stock</option>
+                                  <option value="onbackorder">On backorder</option>
+                                </select>
+                             </div>
+                          </div>
+                        )}
+
+                        {activeTab === 'shipping' && (
+                          <div className="space-y-4 max-w-md animate-in fade-in">
+                             <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right">Weight (kg)</label>
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  className="col-span-2 p-2 border border-gray-200 rounded text-sm focus:border-orange-500 outline-none"
+                                  placeholder="0.00"
+                                  value={productData.weight}
+                                  onChange={e => setProductData({...productData, weight: e.target.value})}
+                                />
+                             </div>
+                             <div className="grid grid-cols-3 items-start gap-4">
+                                <label className="text-xs font-bold text-gray-600 text-right pt-2">Dimensions (cm)</label>
+                                <div className="col-span-2 flex gap-2">
+                                  <input type="number" placeholder="Length" className="w-full p-2 border border-gray-200 rounded text-sm outline-none" value={productData.length} onChange={e => setProductData({...productData, length: e.target.value})} />
+                                  <input type="number" placeholder="Width" className="w-full p-2 border border-gray-200 rounded text-sm outline-none" value={productData.width} onChange={e => setProductData({...productData, width: e.target.value})} />
+                                  <input type="number" placeholder="Height" className="w-full p-2 border border-gray-200 rounded text-sm outline-none" value={productData.height} onChange={e => setProductData({...productData, height: e.target.value})} />
+                                </div>
+                             </div>
+                          </div>
+                        )}
+                     </div>
+                  </div>
+                </div>
+
+                {/* Short Description */}
+                <div className="space-y-2">
+                   <label className="text-xs font-bold text-gray-500 uppercase">Product Short Description</label>
+                   <textarea 
+                     className="w-full p-4 border border-gray-200 rounded-lg text-sm min-h-[100px] focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none shadow-sm resize-y"
+                     placeholder="Brief summary..."
+                     value={productData.short_description}
+                     onChange={e => setProductData({...productData, short_description: e.target.value})}
+                   />
+                </div>
+
+              </div>
+
+              {/* Right Column - Sidebar */}
+              <div className="w-full lg:w-80 border-l border-gray-200 bg-white p-6 space-y-6">
+                
+                {/* Publish Box */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                  <h4 className="font-bold text-sm text-gray-700">Publish</h4>
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Status:</span>
+                    <select 
+                      className="bg-white border border-gray-200 rounded px-2 py-1 outline-none"
+                      value={productData.status}
+                      onChange={e => setProductData({...productData, status: e.target.value})}
+                    >
+                      <option value="publish">Published</option>
+                      <option value="draft">Draft</option>
+                      <option value="pending">Pending Review</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    <span>Visibility:</span>
+                    <span className="font-bold">Public</span>
+                  </div>
+                  <div className="pt-2 flex justify-between items-center">
+                    <button onClick={() => setProductData({...productData, status: 'draft'})} className="text-xs text-gray-500 hover:text-orange-600 underline">Save Draft</button>
+                    <button 
+                      onClick={handleCreateProduct}
+                      disabled={isCreating}
+                      className="px-4 py-2 bg-orange-600 text-white rounded text-xs font-bold shadow hover:bg-orange-700 transition-all disabled:opacity-70"
+                    >
+                      {isCreating ? 'Publishing...' : 'Publish'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Categories */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                     <h4 className="font-bold text-sm text-gray-700">Product categories</h4>
+                   </div>
+                   <div className="p-4 max-h-60 overflow-y-auto custom-scrollbar space-y-2">
+                      {loadingCategories ? (
+                        <div className="flex justify-center py-4"><Loader2 className="animate-spin text-orange-500" /></div>
+                      ) : categories.map(cat => (
+                        <div key={cat.id} className="flex items-start gap-2">
+                           <input 
+                             type="checkbox" 
+                             id={`cat-${cat.id}`} 
+                             className="mt-1"
+                             checked={productData.selected_categories.includes(cat.id)}
+                             onChange={() => toggleProductCategory(cat.id)}
+                           />
+                           <label htmlFor={`cat-${cat.id}`} className="text-sm text-gray-600 select-none cursor-pointer leading-tight">{cat.name}</label>
+                        </div>
+                      ))}
+                   </div>
+                   <div className="bg-gray-50 px-4 py-2 border-t border-gray-200">
+                     <button className="text-xs text-orange-600 hover:underline flex items-center gap-1">+ Add new category</button>
+                   </div>
+                </div>
+
+                {/* Product Image */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                     <h4 className="font-bold text-sm text-gray-700">Product image</h4>
+                   </div>
+                   <div className="p-4 space-y-3">
+                      {productData.image_url ? (
+                        <div className="relative group">
+                          <img src={productData.image_url} alt="Product" className="w-full h-auto rounded border border-gray-200" onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Invalid+URL')} />
+                          <button 
+                            onClick={() => setProductData({...productData, image_url: ''})}
+                            className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full h-32 bg-gray-100 rounded border border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400">
+                          <ImageIcon size={24} />
+                          <span className="text-xs mt-1">No image selected</span>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Image URL</label>
+                        <input 
+                          type="url" 
+                          placeholder="https://..." 
+                          className="w-full p-2 border border-gray-200 rounded text-xs outline-none focus:border-orange-500"
+                          value={productData.image_url}
+                          onChange={e => setProductData({...productData, image_url: e.target.value})}
+                        />
+                        <p className="text-[10px] text-gray-400 italic">Enter external image URL.</p>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Product Gallery */}
+                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                   <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                     <h4 className="font-bold text-sm text-gray-700">Product gallery</h4>
+                   </div>
+                   <div className="p-4 space-y-2">
+                      {productData.gallery_urls.map((url, idx) => (
+                        <div key={idx} className="flex gap-2">
+                          <input 
+                            type="url"
+                            placeholder="Image URL"
+                            className="flex-1 p-2 border border-gray-200 rounded text-xs outline-none focus:border-orange-500"
+                            value={url}
+                            onChange={(e) => {
+                              const newUrls = [...productData.gallery_urls];
+                              newUrls[idx] = e.target.value;
+                              setProductData({...productData, gallery_urls: newUrls});
+                            }}
+                          />
+                          {idx === productData.gallery_urls.length - 1 ? (
+                            <button onClick={() => setProductData({...productData, gallery_urls: [...productData.gallery_urls, '']})} className="p-2 bg-gray-100 rounded hover:bg-gray-200"><Plus size={14}/></button>
+                          ) : (
+                             <button onClick={() => {
+                               const newUrls = productData.gallery_urls.filter((_, i) => i !== idx);
+                               setProductData({...productData, gallery_urls: newUrls});
+                             }} className="p-2 bg-gray-100 rounded hover:text-red-500"><X size={14}/></button>
+                          )}
+                        </div>
+                      ))}
+                   </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

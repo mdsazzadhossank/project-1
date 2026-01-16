@@ -4,15 +4,13 @@ import {
   LayoutDashboard, 
   BarChart2, 
   Package, 
-  Tag, 
-  Layers, 
-  Percent, 
   Receipt, 
   Users,
   ChevronRight,
   Truck,
   Minus,
-  MessageSquare
+  MessageSquare,
+  ShoppingCart
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -169,6 +167,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, status
             setIsProductsOpen(false);
           }}
         />
+        <SidebarItem 
+          icon={<ShoppingCart size={18} />} 
+          label="Buy Sms" 
+          onClick={() => {
+            window.open('https://sms.mram.com.bd/login', '_blank');
+          }}
+        />
       </div>
 
       <div className="px-4 pb-8">
@@ -235,9 +240,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, status
           </div>
         )}
 
-        <SidebarItem icon={<Tag size={18} />} label="Brand" />
-        <SidebarItem icon={<Layers size={18} />} label="Category" />
-        <SidebarItem icon={<Percent size={18} />} label="Promotion" hasSubmenu />
         <SidebarItem 
           icon={<Receipt size={18} />} 
           label="Expense" 

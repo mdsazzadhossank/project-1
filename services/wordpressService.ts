@@ -14,6 +14,28 @@ export interface WPCategory {
   count: number;
 }
 
+export interface CreateProductPayload {
+  name: string;
+  type?: 'simple' | 'variable';
+  regular_price: string;
+  sale_price?: string;
+  description?: string;
+  short_description?: string;
+  sku?: string;
+  categories?: { id: number }[];
+  images?: { src: string }[];
+  manage_stock?: boolean;
+  stock_quantity?: number;
+  stock_status?: 'instock' | 'outofstock' | 'onbackorder';
+  status?: 'publish' | 'draft' | 'pending' | 'private';
+  weight?: string;
+  dimensions?: {
+    length: string;
+    width: string;
+    height: string;
+  };
+}
+
 const SETTINGS_URL = "api/settings.php";
 const TRACKING_URL = "api/local_tracking.php";
 
@@ -195,12 +217,44 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
     if (!config || !config.url) return [];
     const { url, consumerKey, consumerSecret } = config;
     const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-    const apiBase = `${baseUrl}/wp-json/wc/v3/products/categories?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+    const apiBase = `${baseUrl}/wp-json/wc/v3/products/categories?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}&per_page=100`;
     const res = await fetch(apiBase);
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   } catch (e) {
     return [];
+  }
+};
+
+export const createProductInWP = async (productData: CreateProductPayload): Promise<{success: boolean; message?: string; product?: any}> => {
+  try {
+    const config = await getWPConfig();
+    if (!config || !config.url || !config.consumerKey) {
+      return { success: false, message: "WordPress connection not configured." };
+    }
+
+    const { url, consumerKey, consumerSecret } = config;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const apiBase = `${baseUrl}/wp-json/wc/v3/products?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+
+    const response = await fetch(apiBase, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(productData)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { success: false, message: data.message || "Failed to create product in WordPress" };
+    }
+
+    return { success: true, product: data };
+  } catch (error: any) {
+    console.error("Create product failed", error);
+    return { success: false, message: error.message || "Network error occurred" };
   }
 };
