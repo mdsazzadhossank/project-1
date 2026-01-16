@@ -228,15 +228,54 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   }
 };
 
-export const uploadImageToWP = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
-  try {
-    const config = await getWPConfig();
-    if (!config || !config.url || !config.consumerKey) {
-      console.error("WP Config missing for upload");
-      return { success: false, error: "Settings not configured" };
-    }
+/**
+ * Helper function for Direct Upload (Fallback)
+ */
+const directUploadToWP = async (file: File, config: WPConfig): Promise<{ success: boolean; url?: string; error?: string }> => {
+    try {
+        const { url, consumerKey, consumerSecret } = config;
+        const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+        
+        // Pass auth in URL to avoid Header Stripping in some hosting
+        const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
 
-    // Use updated proxy logic (API calls via URL params to avoid header stripping)
+        const response = await fetch(apiBase, {
+            method: 'POST',
+            headers: {
+                'Content-Disposition': `attachment; filename="${file.name}"`,
+                'Content-Type': file.type,
+                'Cache-Control': 'no-cache'
+            },
+            body: file
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return { success: false, error: data.message || `Direct Upload Failed: ${response.status}` };
+        }
+
+        if (data.source_url) {
+            return { success: true, url: data.source_url };
+        } else if (data.guid && data.guid.rendered) {
+            return { success: true, url: data.guid.rendered };
+        } else {
+            return { success: false, error: "URL not found in response" };
+        }
+    } catch (e: any) {
+        return { success: false, error: "Direct Upload Error: " + e.message };
+    }
+}
+
+export const uploadImageToWP = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
+  const config = await getWPConfig();
+  if (!config || !config.url || !config.consumerKey) {
+    console.error("WP Config missing for upload");
+    return { success: false, error: "Settings not configured" };
+  }
+
+  // --- STRATEGY 1: TRY PHP PROXY (Best for CORS/Header issues) ---
+  try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('url', config.url);
@@ -249,31 +288,37 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
     });
 
     const text = await response.text();
+
+    // Check if PHP actually ran or if we got source code/HTML back
+    if (text.trim().startsWith("<?php") || text.includes("<html") || response.status === 404) {
+       console.warn("Proxy script not executable or not found. Falling back to direct upload.");
+       throw new Error("Proxy unavailable");
+    }
+
     let data;
     try {
       data = JSON.parse(text);
     } catch (e) {
-      console.error("Proxy JSON Parse Error. Response:", text);
-      return { success: false, error: "Invalid JSON response from server. Check proxy logs." };
+      throw new Error("Invalid JSON from proxy: " + text.substring(0, 100));
     }
 
-    if (!response.ok || (data.code && data.code !== 'rest_upload_sideload_error')) { // Ignore specific sideload warning if URL exists
-      const msg = data.message || data.code || (data.raw_response ? `WP Error: ${data.raw_response}` : "Upload Failed");
-      console.error("Proxy Upload Failed:", msg);
-      return { success: false, error: msg };
+    if (!response.ok) {
+        // If proxy connected to WP but WP gave error, throw to catch block but might be unrecoverable
+        throw new Error(data.message || "Proxy returned error");
     }
 
-    // WordPress Media API usually returns the object with source_url
-    if (data.source_url) {
-      return { success: true, url: data.source_url };
-    } else if (data.guid && data.guid.rendered) {
-       return { success: true, url: data.guid.rendered };
-    } else {
-      return { success: false, error: "Image URL not found in WordPress response" };
-    }
-  } catch (error: any) {
-    console.error("Image upload exception:", error);
-    return { success: false, error: error.message || "Network/Proxy Error" };
+    if (data.source_url) return { success: true, url: data.source_url };
+    if (data.guid && data.guid.rendered) return { success: true, url: data.guid.rendered };
+    
+    // If no URL, assume failure
+    throw new Error("No URL in proxy response");
+
+  } catch (proxyError: any) {
+    console.log("Proxy attempt failed:", proxyError.message);
+    console.log("Attempting Strategy 2: Direct Upload...");
+    
+    // --- STRATEGY 2: FALLBACK TO DIRECT UPLOAD ---
+    return await directUploadToWP(file, config);
   }
 };
 
