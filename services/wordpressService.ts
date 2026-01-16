@@ -238,17 +238,21 @@ export const uploadImageToWP = async (file: File): Promise<string | null> => {
     const { url, consumerKey, consumerSecret } = config;
     const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
     
-    // Switch to using URL query parameters for authentication to avoid Authorization header stripping issues
+    // Using URL Params for auth to bypass header stripping on some servers
     const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
 
-    // Use FormData which is the standard way to upload files in browser
-    const formData = new FormData();
-    formData.append('file', file);
+    // Clean filename to remove spaces and special characters that might break headers
+    // We keep extensions and alphanumeric characters
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
+    // WP Media API expects raw binary body, not FormData, with Content-Disposition header
     const response = await fetch(apiBase, {
       method: 'POST',
-      // Do not set Content-Type header manually when using FormData, browser sets it with boundary
-      body: formData
+      headers: {
+        'Content-Disposition': `attachment; filename="${cleanFileName}"`,
+        'Content-Type': file.type
+      },
+      body: file
     });
 
     if (!response.ok) {
