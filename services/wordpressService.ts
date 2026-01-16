@@ -38,7 +38,6 @@ export interface CreateProductPayload {
 
 const SETTINGS_URL = "api/settings.php";
 const TRACKING_URL = "api/local_tracking.php";
-const PROXY_UPLOAD_URL = "api/proxy_upload.php";
 
 const fetchSetting = async (key: string) => {
   try {
@@ -228,44 +227,6 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   }
 };
 
-/**
- * Helper function for Direct Upload (Fallback)
- */
-const directUploadToWP = async (file: File, config: WPConfig): Promise<{ success: boolean; url?: string; error?: string }> => {
-    try {
-        const { url, consumerKey, consumerSecret } = config;
-        const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-        
-        // Pass auth in URL
-        const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
-
-        // Use FormData for better CORS handling (no custom headers needed)
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(apiBase, {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            return { success: false, error: data.message || `Direct Upload Failed: ${response.status}` };
-        }
-
-        if (data.source_url) {
-            return { success: true, url: data.source_url };
-        } else if (data.guid && data.guid.rendered) {
-            return { success: true, url: data.guid.rendered };
-        } else {
-            return { success: false, error: "URL not found in response" };
-        }
-    } catch (e: any) {
-        return { success: false, error: "Direct Upload Error: " + e.message };
-    }
-}
-
 export const uploadImageToWP = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
   const config = await getWPConfig();
   if (!config || !config.url || !config.consumerKey) {
@@ -273,49 +234,42 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
     return { success: false, error: "Settings not configured" };
   }
 
-  // --- STRATEGY 1: TRY PHP PROXY (Best for CORS/Header issues) ---
+  const { url, consumerKey, consumerSecret } = config;
+  const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+  
+  // Custom Plugin Endpoint
+  const apiBase = `${baseUrl}/wp-json/bdcommerce/v1/upload`;
+
   try {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('url', config.url);
-    formData.append('consumer_key', config.consumerKey);
-    formData.append('consumer_secret', config.consumerSecret);
+    formData.append('consumer_key', consumerKey);
+    formData.append('consumer_secret', consumerSecret);
 
-    const response = await fetch(PROXY_UPLOAD_URL, {
-      method: 'POST',
-      body: formData
+    const response = await fetch(apiBase, {
+        method: 'POST',
+        body: formData
     });
 
-    const text = await response.text();
-
-    // Check if PHP actually ran
-    if (text.trim().startsWith("<?php") || text.includes("<html") || response.status === 404) {
-       console.warn("Proxy script not executable or not found. Falling back to direct upload.");
-       throw new Error("Proxy unavailable");
+    if (response.status === 404) {
+        throw new Error("Plugin not installed. Please install 'BdCommerce Connect' plugin on WordPress.");
     }
 
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      throw new Error("Invalid JSON from proxy: " + text.substring(0, 100));
-    }
+    const data = await response.json();
 
     if (!response.ok) {
-        throw new Error(data.message || "Proxy returned error");
+        throw new Error(data.message || data.code || "Upload failed");
     }
 
-    if (data.source_url) return { success: true, url: data.source_url };
-    if (data.guid && data.guid.rendered) return { success: true, url: data.guid.rendered };
+    if (data.url) {
+        return { success: true, url: data.url };
+    }
     
-    throw new Error("No URL in proxy response");
+    throw new Error("Invalid response from plugin");
 
-  } catch (proxyError: any) {
-    console.log("Proxy attempt failed:", proxyError.message);
-    console.log("Attempting Strategy 2: Direct Upload...");
-    
-    // --- STRATEGY 2: FALLBACK TO DIRECT UPLOAD ---
-    return await directUploadToWP(file, config);
+  } catch (e: any) {
+    console.error("Plugin upload failed:", e);
+    return { success: false, error: e.message };
   }
 };
 

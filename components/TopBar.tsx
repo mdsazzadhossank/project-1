@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, Globe, RefreshCcw, Calendar, ChevronDown, LayoutGrid, Settings, X, Truck, Copy, Check } from 'lucide-react';
+import { Search, Bell, Globe, RefreshCcw, Calendar, ChevronDown, LayoutGrid, Settings, X, Truck, Copy, Check, Download, AlertCircle } from 'lucide-react';
 import { getWPConfig, saveWPConfig, WPConfig } from '../services/wordpressService';
 import { getCourierConfig, saveCourierConfig } from '../services/courierService';
 import { getPathaoConfig, savePathaoConfig } from '../services/pathaoService';
@@ -43,6 +43,7 @@ export const TopBar: React.FC = () => {
 
   const pathaoWebhookUrl = `${window.location.origin}/api/pathao_webhook.php`;
   const steadfastWebhookUrl = `${window.location.origin}/api/steadfast_webhook.php`;
+  const pluginDownloadUrl = `${window.location.origin}/bdcommerce-connect.php`;
 
   const copyPathao = () => {
     navigator.clipboard.writeText(pathaoWebhookUrl);
@@ -174,6 +175,26 @@ export const TopBar: React.FC = () => {
                       value={config.consumerSecret}
                       onChange={(e) => setConfig({...config, consumerSecret: e.target.value})}
                     />
+                  </div>
+                  
+                  {/* Plugin Download Section */}
+                  <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 mt-4">
+                    <div className="flex gap-3">
+                      <AlertCircle size={20} className="text-orange-600 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-bold text-orange-800 mb-1">Upload Issue?</h4>
+                        <p className="text-[10px] text-orange-700 leading-relaxed mb-3">
+                          To fix image upload errors (401/CORS), please install our helper plugin on your WordPress site.
+                        </p>
+                        <a 
+                          href={pluginDownloadUrl} 
+                          download="bdcommerce-connect.php"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white text-[10px] font-bold rounded shadow-sm hover:bg-orange-700 transition-colors"
+                        >
+                          <Download size={12} /> Download Plugin
+                        </a>
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
