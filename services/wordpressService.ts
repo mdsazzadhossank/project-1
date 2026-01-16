@@ -236,17 +236,16 @@ const directUploadToWP = async (file: File, config: WPConfig): Promise<{ success
         const { url, consumerKey, consumerSecret } = config;
         const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
         
-        // Pass auth in URL to avoid Header Stripping in some hosting
+        // Pass auth in URL
         const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+
+        // Use FormData for better CORS handling (no custom headers needed)
+        const formData = new FormData();
+        formData.append('file', file);
 
         const response = await fetch(apiBase, {
             method: 'POST',
-            headers: {
-                'Content-Disposition': `attachment; filename="${file.name}"`,
-                'Content-Type': file.type,
-                'Cache-Control': 'no-cache'
-            },
-            body: file
+            body: formData
         });
 
         const data = await response.json();
@@ -289,7 +288,7 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
 
     const text = await response.text();
 
-    // Check if PHP actually ran or if we got source code/HTML back
+    // Check if PHP actually ran
     if (text.trim().startsWith("<?php") || text.includes("<html") || response.status === 404) {
        console.warn("Proxy script not executable or not found. Falling back to direct upload.");
        throw new Error("Proxy unavailable");
@@ -303,14 +302,12 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
     }
 
     if (!response.ok) {
-        // If proxy connected to WP but WP gave error, throw to catch block but might be unrecoverable
         throw new Error(data.message || "Proxy returned error");
     }
 
     if (data.source_url) return { success: true, url: data.source_url };
     if (data.guid && data.guid.rendered) return { success: true, url: data.guid.rendered };
     
-    // If no URL, assume failure
     throw new Error("No URL in proxy response");
 
   } catch (proxyError: any) {

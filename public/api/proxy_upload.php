@@ -25,7 +25,7 @@ $wpUrl = rtrim($_POST['url'], '/');
 $consumerKey = trim($_POST['consumer_key']);
 $consumerSecret = trim($_POST['consumer_secret']);
 
-// Construct WP API URL
+// Construct WP API URL (Keep params in URL for compatibility)
 $endpoint = $wpUrl . "/wp-json/wp/v2/media?consumer_key=" . $consumerKey . "&consumer_secret=" . $consumerSecret;
 
 // Read file data
@@ -38,12 +38,15 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, $fileContent);
 
+// Construct Basic Auth Header
+$auth = base64_encode($consumerKey . ":" . $consumerSecret);
+
 // Headers
 $headers = [
+    'Authorization: Basic ' . $auth, // Added Basic Auth for robust authentication
     'Content-Type: ' . $file['type'],
     'Content-Disposition: attachment; filename="' . $file['name'] . '"',
-    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36',
-    'Cache-Control: no-cache'
+    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36'
 ];
 
 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -62,6 +65,17 @@ if ($curlError) {
     http_response_code(500);
     echo json_encode(["message" => "Proxy cURL Error: " . $curlError]);
     exit;
+}
+
+// Check specifically for permissions error
+if ($httpCode === 401 || $httpCode === 403) {
+    $json = json_decode($response, true);
+    if (isset($json['message'])) {
+         // Pass the WP error message through
+         http_response_code($httpCode);
+         echo json_encode(["message" => "WP Permission Error: " . $json['message'] . " (Check if API Key has Read/Write permissions)"]);
+         exit;
+    }
 }
 
 http_response_code($httpCode >= 200 && $httpCode < 300 ? 200 : $httpCode);
