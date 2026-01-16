@@ -236,8 +236,7 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
       return { success: false, error: "Settings not configured" };
     }
 
-    // Use our new PHP Proxy to handle the upload server-side
-    // This bypasses CORS, Mixed Content, and Header Stripping issues
+    // Use updated proxy logic (API calls via URL params to avoid header stripping)
     const formData = new FormData();
     formData.append('file', file);
     formData.append('url', config.url);
@@ -254,25 +253,27 @@ export const uploadImageToWP = async (file: File): Promise<{ success: boolean; u
     try {
       data = JSON.parse(text);
     } catch (e) {
-      console.error("Proxy response parse error. Raw response:", text);
-      return { success: false, error: "Invalid response from server proxy" };
+      console.error("Proxy JSON Parse Error. Response:", text);
+      return { success: false, error: "Invalid JSON response from server. Check proxy logs." };
     }
 
-    if (!response.ok) {
-      const msg = data.message || data.code || "Upload Failed";
-      console.error("Proxy Upload Error:", msg);
+    if (!response.ok || (data.code && data.code !== 'rest_upload_sideload_error')) { // Ignore specific sideload warning if URL exists
+      const msg = data.message || data.code || (data.raw_response ? `WP Error: ${data.raw_response}` : "Upload Failed");
+      console.error("Proxy Upload Failed:", msg);
       return { success: false, error: msg };
     }
 
-    // WordPress Media API returns the object with source_url
+    // WordPress Media API usually returns the object with source_url
     if (data.source_url) {
       return { success: true, url: data.source_url };
+    } else if (data.guid && data.guid.rendered) {
+       return { success: true, url: data.guid.rendered };
     } else {
-      return { success: false, error: "No image URL returned from WordPress" };
+      return { success: false, error: "Image URL not found in WordPress response" };
     }
   } catch (error: any) {
-    console.error("Image upload failed:", error);
-    return { success: false, error: error.message || "Network Error" };
+    console.error("Image upload exception:", error);
+    return { success: false, error: error.message || "Network/Proxy Error" };
   }
 };
 
