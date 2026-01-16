@@ -27,7 +27,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { getBusinessInsights } from './services/geminiService';
-import { fetchOrdersFromWP, fetchProductsFromWP, getWPConfig, fetchCategoriesFromWP, WPCategory } from './services/wordpressService';
+import { fetchOrdersFromWP, fetchProductsFromWP, getWPConfig, fetchCategoriesFromWP, WPCategory, updateOrderInWP } from './services/wordpressService';
 import { syncOrderStatusWithCourier } from './services/courierService';
 import { getExpenses, saveExpenses } from './services/expenseService';
 import { fetchCustomersFromDB, syncCustomerWithDB } from './services/customerService';
@@ -191,9 +191,23 @@ const App: React.FC = () => {
     if (!orderToUpdate) return;
 
     if (orderToUpdate.status !== newStatus) {
+      const oldStatus = orderToUpdate.status;
+      
+      // Optimistic update in UI
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-      console.log(`[Manual Update] Status changed for #${orderId} to ${newStatus}`);
-      await triggerAutomationSMS({ ...orderToUpdate, status: newStatus }, newStatus);
+      
+      // Call WP API
+      const success = await updateOrderInWP(orderId, newStatus);
+      
+      if (success) {
+        console.log(`[Sync] Status updated for #${orderId} to ${newStatus} on WordPress`);
+        await triggerAutomationSMS({ ...orderToUpdate, status: newStatus }, newStatus);
+      } else {
+        // Revert on failure
+        console.error("Failed to sync with WordPress");
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: oldStatus } : o));
+        alert("Failed to update status on WordPress site. Please check connection.");
+      }
     }
   };
 

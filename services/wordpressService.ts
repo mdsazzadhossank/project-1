@@ -304,3 +304,36 @@ export const createProductInWP = async (productData: CreateProductPayload): Prom
     return { success: false, message: error.message || "Network error occurred" };
   }
 };
+
+export const updateOrderInWP = async (orderId: string, status: string): Promise<boolean> => {
+  try {
+    const config = await getWPConfig();
+    if (!config || !config.url || !config.consumerKey) {
+       console.error("WP connection missing for order update");
+       return false;
+    }
+
+    const { url, consumerKey, consumerSecret } = config;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const apiBase = `${baseUrl}/wp-json/wc/v3/orders/${orderId}?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+
+    const response = await fetch(apiBase, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status })
+    });
+
+    if (!response.ok) {
+       const err = await response.json();
+       console.error("Failed to update WP order status:", err);
+       return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Network error updating WP order:", error);
+    return false;
+  }
+};
