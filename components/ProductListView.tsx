@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Plus, X, Loader2, Image as ImageIcon, UploadCloud, Box, Layers, Settings, Save } from 'lucide-react';
+import { Search, Plus, X, Loader2, Image as ImageIcon, UploadCloud, Box, Layers, Settings, Save, Edit, RefreshCw } from 'lucide-react';
 import { InventoryProduct } from '../types';
-import { fetchCategoriesFromWP, WPCategory, createProductInWP, CreateProductPayload, uploadImageToWP } from '../services/wordpressService';
+import { fetchCategoriesFromWP, WPCategory, createProductInWP, updateProductInWP, getProductFromWP, CreateProductPayload, uploadImageToWP } from '../services/wordpressService';
 
 interface ProductListViewProps {
   initialProducts?: InventoryProduct[];
@@ -37,7 +37,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const [priceRange, setPriceRange] = useState({ min: 0, max: 1000000 });
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
   
-  // Add Product Modal State
+  // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'inventory' | 'shipping'>('general');
@@ -45,6 +45,8 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   
   // Detailed Product State
   const [productData, setProductData] = useState({
@@ -141,7 +143,65 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     }
   };
 
-  const handleCreateProduct = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setProductData({
+      name: '', description: '', short_description: '', regular_price: '', sale_price: '',
+      sku: '', stock_status: 'instock', manage_stock: false, stock_quantity: '',
+      weight: '', length: '', width: '', height: '',
+      image_url: '', gallery_urls: [''], selected_categories: [], status: 'publish'
+    });
+    setSelectedImageFile(null);
+    setImagePreviewUrl('');
+    setEditingId(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
+    setShowAddModal(true);
+  };
+
+  const openEditModal = async (product: InventoryProduct) => {
+    setLoadingDetails(true);
+    setEditingId(product.id);
+    
+    try {
+      // Fetch full details from WP because InventoryProduct list only has summary
+      const fullProduct = await getProductFromWP(product.id);
+      
+      if (fullProduct) {
+        setProductData({
+          name: fullProduct.name,
+          description: fullProduct.description ? fullProduct.description.replace(/<[^>]+>/g, '') : '', // Simple strip HTML
+          short_description: fullProduct.short_description ? fullProduct.short_description.replace(/<[^>]+>/g, '') : '',
+          regular_price: fullProduct.regular_price || '',
+          sale_price: fullProduct.sale_price || '',
+          sku: fullProduct.sku || '',
+          stock_status: fullProduct.stock_status || 'instock',
+          manage_stock: fullProduct.manage_stock || false,
+          stock_quantity: fullProduct.stock_quantity ? fullProduct.stock_quantity.toString() : '',
+          weight: fullProduct.weight || '',
+          length: fullProduct.dimensions?.length || '',
+          width: fullProduct.dimensions?.width || '',
+          height: fullProduct.dimensions?.height || '',
+          image_url: fullProduct.images?.[0]?.src || '',
+          gallery_urls: fullProduct.images?.slice(1).map((img: any) => img.src) || [''],
+          selected_categories: fullProduct.categories?.map((c: any) => c.id) || [],
+          status: fullProduct.status || 'publish'
+        });
+        setImagePreviewUrl(fullProduct.images?.[0]?.src || '');
+        setShowAddModal(true);
+      } else {
+        alert("Could not fetch product details. Please check connection.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error loading product details");
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productData.name || !productData.regular_price) {
       alert("Product Name and Regular Price are required!");
@@ -205,10 +265,15 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
         };
       }
 
-      const result = await createProductInWP(payload);
+      let result;
+      if (editingId) {
+        result = await updateProductInWP(editingId, payload);
+      } else {
+        result = await createProductInWP(payload);
+      }
       
       if (result.success && result.product) {
-        const created: InventoryProduct = {
+        const updatedProduct: InventoryProduct = {
           id: result.product.id.toString(),
           name: result.product.name,
           brand: 'N/A',
@@ -220,24 +285,22 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
           img: result.product.images?.[0]?.src || 'https://via.placeholder.com/150'
         };
         
-        setAllProducts(prev => [created, ...prev]);
+        if (editingId) {
+          setAllProducts(prev => prev.map(p => p.id === editingId ? updatedProduct : p));
+          alert("Product Updated Successfully!");
+        } else {
+          setAllProducts(prev => [updatedProduct, ...prev]);
+          alert("Product Published Successfully!");
+        }
+        
         setShowAddModal(false);
-        // Reset state
-        setProductData({
-          name: '', description: '', short_description: '', regular_price: '', sale_price: '',
-          sku: '', stock_status: 'instock', manage_stock: false, stock_quantity: '',
-          weight: '', length: '', width: '', height: '',
-          image_url: '', gallery_urls: [''], selected_categories: [], status: 'publish'
-        });
-        setSelectedImageFile(null);
-        setImagePreviewUrl('');
-        alert("Product Published Successfully to WordPress!");
+        resetForm();
       } else {
         alert("Error: " + result.message);
       }
     } catch (error) {
       console.error(error);
-      alert("Failed to create product");
+      alert("Failed to save product");
     } finally {
       setIsCreating(false);
       setUploadingImage(false);
@@ -245,7 +308,16 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   };
 
   return (
-    <div className="flex gap-6 animate-in fade-in duration-500 pb-20">
+    <div className="flex gap-6 animate-in fade-in duration-500 pb-20 relative">
+      {loadingDetails && (
+        <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] z-[50] flex items-center justify-center rounded-xl">
+          <div className="flex flex-col items-center gap-3">
+             <Loader2 size={32} className="animate-spin text-orange-600" />
+             <span className="text-sm font-bold text-gray-600">Loading Product Details...</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 space-y-4">
         <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-4 flex items-center justify-between border-b border-gray-50">
@@ -277,7 +349,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               </div>
               <button 
-                onClick={() => setShowAddModal(true)}
+                onClick={openAddModal}
                 className="bg-orange-600 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-orange-200 hover:bg-orange-700 transition-all"
               >
                 <Plus size={16} /> Add Product
@@ -319,7 +391,12 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                       </div>
                     </td>
                     <td className="px-6 py-5 text-right">
-                      <button className="text-orange-600 text-xs font-bold">Details</button>
+                      <button 
+                        onClick={() => openEditModal(p)}
+                        className="text-orange-600 text-xs font-bold hover:underline flex items-center justify-end gap-1 ml-auto"
+                      >
+                        <Edit size={12} /> Details
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -370,7 +447,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
         </div>
       </div>
 
-      {/* Advanced Add Product Modal - WordPress Style */}
+      {/* Advanced Add/Edit Product Modal - WordPress Style */}
       {showAddModal && (
         <div className="fixed inset-0 bg-gray-100/90 backdrop-blur-sm z-[200] flex items-start justify-center overflow-y-auto p-4 md:p-8">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl flex flex-col min-h-[85vh] animate-in zoom-in-95 duration-200">
@@ -378,19 +455,19 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20 rounded-t-xl">
               <div>
                 <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <Box className="text-orange-600" /> Add New Product
+                  <Box className="text-orange-600" /> {editingId ? 'Edit Product' : 'Add New Product'}
                 </h3>
-                <p className="text-xs text-gray-400 mt-1">Create a new product card for your store.</p>
+                <p className="text-xs text-gray-400 mt-1">{editingId ? 'Update product details and inventory.' : 'Create a new product card for your store.'}</p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all">Cancel</button>
                 <button 
-                  onClick={handleCreateProduct}
+                  onClick={handleSaveProduct}
                   disabled={isCreating || uploadingImage}
                   className="px-6 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold shadow-lg hover:bg-orange-700 transition-all flex items-center gap-2 disabled:opacity-70"
                 >
-                  {(uploadingImage || isCreating) ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  {uploadingImage ? 'Uploading Image...' : (isCreating ? 'Publishing...' : 'Publish Product')}
+                  {(uploadingImage || isCreating) ? <Loader2 size={16} className="animate-spin" /> : (editingId ? <RefreshCw size={16} /> : <Save size={16} />)}
+                  {uploadingImage ? 'Uploading Image...' : (isCreating ? (editingId ? 'Updating...' : 'Publishing...') : (editingId ? 'Update Product' : 'Publish Product'))}
                 </button>
               </div>
             </div>
@@ -595,12 +672,12 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                   <div className="pt-2 flex justify-between items-center">
                     <button onClick={() => setProductData({...productData, status: 'draft'})} className="text-xs text-gray-500 hover:text-orange-600 underline">Save Draft</button>
                     <button 
-                      onClick={handleCreateProduct}
+                      onClick={handleSaveProduct}
                       disabled={isCreating || uploadingImage}
                       className="px-4 py-2 bg-orange-600 text-white rounded text-xs font-bold shadow hover:bg-orange-700 transition-all disabled:opacity-70 flex items-center gap-1"
                     >
                       {uploadingImage ? <Loader2 size={12} className="animate-spin" /> : null}
-                      {uploadingImage ? 'Uploading...' : (isCreating ? 'Publishing...' : 'Publish')}
+                      {uploadingImage ? 'Uploading...' : (isCreating ? (editingId ? 'Updating...' : 'Publishing...') : (editingId ? 'Update' : 'Publish'))}
                     </button>
                   </div>
                 </div>

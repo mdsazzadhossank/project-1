@@ -211,6 +211,24 @@ export const fetchProductsFromWP = async (): Promise<InventoryProduct[]> => {
   }
 };
 
+export const getProductFromWP = async (id: string): Promise<any> => {
+  try {
+    const config = await getWPConfig();
+    if (!config || !config.url || !config.consumerKey) return null;
+
+    const { url, consumerKey, consumerSecret } = config;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const apiBase = `${baseUrl}/wp-json/wc/v3/products/${id}?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+
+    const response = await fetch(apiBase);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.error("Fetch single product failed", error);
+    return null;
+  }
+};
+
 export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   try {
     const config = await getWPConfig();
@@ -301,6 +319,38 @@ export const createProductInWP = async (productData: CreateProductPayload): Prom
     return { success: true, product: data };
   } catch (error: any) {
     console.error("Create product failed", error);
+    return { success: false, message: error.message || "Network error occurred" };
+  }
+};
+
+export const updateProductInWP = async (productId: string, productData: Partial<CreateProductPayload>): Promise<{success: boolean; message?: string; product?: any}> => {
+  try {
+    const config = await getWPConfig();
+    if (!config || !config.url || !config.consumerKey) {
+      return { success: false, message: "WordPress connection not configured." };
+    }
+
+    const { url, consumerKey, consumerSecret } = config;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const apiBase = `${baseUrl}/wp-json/wc/v3/products/${productId}?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
+
+    const response = await fetch(apiBase, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(productData)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { success: false, message: data.message || "Failed to update product in WordPress" };
+    }
+
+    return { success: true, product: data };
+  } catch (error: any) {
+    console.error("Update product failed", error);
     return { success: false, message: error.message || "Network error occurred" };
   }
 };
