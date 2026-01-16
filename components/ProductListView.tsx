@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronDown, Plus, Info, X, Loader2, Image as ImageIcon, CheckCircle, UploadCloud, Box, Tag, Layers, Settings, Save } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Search, ChevronDown, Plus, Info, X, Loader2, Image as ImageIcon, CheckCircle, UploadCloud, Box, Tag, Layers, Settings, Save, Trash2 } from 'lucide-react';
 import { InventoryProduct } from '../types';
-import { fetchCategoriesFromWP, WPCategory, createProductInWP, CreateProductPayload } from '../services/wordpressService';
+import { fetchCategoriesFromWP, WPCategory, createProductInWP, CreateProductPayload, uploadImageToWP } from '../services/wordpressService';
 
 interface ProductListViewProps {
   initialProducts?: InventoryProduct[];
@@ -41,6 +41,10 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'inventory' | 'shipping'>('general');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Detailed Product State
   const [productData, setProductData] = useState({
@@ -57,7 +61,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     length: '',
     width: '',
     height: '',
-    image_url: '',
+    image_url: '', // This will hold the uploaded URL
     gallery_urls: [''],
     selected_categories: [] as number[],
     status: 'publish'
@@ -127,6 +131,16 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     setStatusFilter('All');
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedImageFile(file);
+      // Create local preview
+      const preview = URL.createObjectURL(file);
+      setImagePreviewUrl(preview);
+    }
+  };
+
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productData.name || !productData.regular_price) {
@@ -136,6 +150,25 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
 
     setIsCreating(true);
     try {
+      let finalImageUrl = productData.image_url;
+
+      // Handle Image Upload
+      if (selectedImageFile) {
+        setUploadingImage(true);
+        const uploadedUrl = await uploadImageToWP(selectedImageFile);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        } else {
+          // If upload fails, ask user if they want to continue
+          if (!confirm("Image upload failed. Do you want to continue without the image?")) {
+            setIsCreating(false);
+            setUploadingImage(false);
+            return;
+          }
+        }
+        setUploadingImage(false);
+      }
+
       const payload: CreateProductPayload = {
         name: productData.name,
         type: 'simple',
@@ -145,7 +178,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
         status: productData.status as any,
         categories: productData.selected_categories.map(id => ({ id })),
         images: [
-          ...(productData.image_url ? [{ src: productData.image_url }] : []),
+          ...(finalImageUrl ? [{ src: finalImageUrl }] : []),
           ...productData.gallery_urls.filter(url => url).map(url => ({ src: url }))
         ]
       };
@@ -187,12 +220,15 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
         
         setAllProducts(prev => [created, ...prev]);
         setShowAddModal(false);
+        // Reset state
         setProductData({
           name: '', description: '', short_description: '', regular_price: '', sale_price: '',
           sku: '', stock_status: 'instock', manage_stock: false, stock_quantity: '',
           weight: '', length: '', width: '', height: '',
           image_url: '', gallery_urls: [''], selected_categories: [], status: 'publish'
         });
+        setSelectedImageFile(null);
+        setImagePreviewUrl('');
         alert("Product Published Successfully to WordPress!");
       } else {
         alert("Error: " + result.message);
@@ -202,6 +238,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
       alert("Failed to create product");
     } finally {
       setIsCreating(false);
+      setUploadingImage(false);
     }
   };
 
@@ -558,8 +595,9 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                     <button 
                       onClick={handleCreateProduct}
                       disabled={isCreating}
-                      className="px-4 py-2 bg-orange-600 text-white rounded text-xs font-bold shadow hover:bg-orange-700 transition-all disabled:opacity-70"
+                      className="px-4 py-2 bg-orange-600 text-white rounded text-xs font-bold shadow hover:bg-orange-700 transition-all disabled:opacity-70 flex items-center gap-1"
                     >
+                      {uploadingImage ? <Loader2 size={12} className="animate-spin" /> : null}
                       {isCreating ? 'Publishing...' : 'Publish'}
                     </button>
                   </div>
@@ -597,33 +635,58 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                      <h4 className="font-bold text-sm text-gray-700">Product image</h4>
                    </div>
                    <div className="p-4 space-y-3">
-                      {productData.image_url ? (
+                      {(imagePreviewUrl || productData.image_url) ? (
                         <div className="relative group">
-                          <img src={productData.image_url} alt="Product" className="w-full h-auto rounded border border-gray-200" onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Invalid+URL')} />
+                          <img 
+                            src={imagePreviewUrl || productData.image_url} 
+                            alt="Product" 
+                            className="w-full h-auto rounded border border-gray-200" 
+                            onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/300?text=Invalid+URL')} 
+                          />
                           <button 
-                            onClick={() => setProductData({...productData, image_url: ''})}
+                            onClick={() => {
+                              setProductData({...productData, image_url: ''});
+                              setImagePreviewUrl('');
+                              setSelectedImageFile(null);
+                            }}
                             className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <X size={12} />
                           </button>
                         </div>
                       ) : (
-                        <div className="w-full h-32 bg-gray-100 rounded border border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400">
-                          <ImageIcon size={24} />
-                          <span className="text-xs mt-1">No image selected</span>
+                        <div 
+                          className="w-full h-32 bg-gray-50 rounded border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-600 transition-all cursor-pointer"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <UploadCloud size={24} />
+                          <span className="text-xs mt-1 font-bold">Select Image</span>
                         </div>
                       )}
                       
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Image URL</label>
-                        <input 
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        onChange={handleFileSelect} 
+                      />
+
+                      <div className="pt-2 border-t border-dashed border-gray-200">
+                         <div className="flex items-center gap-2 mb-1">
+                           <span className="text-[10px] font-bold text-gray-400 uppercase">Or use URL</span>
+                         </div>
+                         <input 
                           type="url" 
                           placeholder="https://..." 
                           className="w-full p-2 border border-gray-200 rounded text-xs outline-none focus:border-orange-500"
                           value={productData.image_url}
-                          onChange={e => setProductData({...productData, image_url: e.target.value})}
+                          onChange={e => {
+                            setProductData({...productData, image_url: e.target.value});
+                            setImagePreviewUrl(''); // Clear file preview if URL is typed
+                            setSelectedImageFile(null);
+                          }}
                         />
-                        <p className="text-[10px] text-gray-400 italic">Enter external image URL.</p>
                       </div>
                    </div>
                 </div>
@@ -657,6 +720,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                           )}
                         </div>
                       ))}
+                      <p className="text-[10px] text-gray-400 italic">Gallery currently supports external URLs only.</p>
                    </div>
                 </div>
 

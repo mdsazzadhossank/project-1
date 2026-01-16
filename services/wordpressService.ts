@@ -227,6 +227,48 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   }
 };
 
+export const uploadImageToWP = async (file: File): Promise<string | null> => {
+  try {
+    const config = await getWPConfig();
+    if (!config || !config.url || !config.consumerKey) {
+      console.error("WP Config missing for upload");
+      return null;
+    }
+
+    const { url, consumerKey, consumerSecret } = config;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const apiBase = `${baseUrl}/wp-json/wp/v2/media`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const auth = btoa(`${consumerKey}:${consumerSecret}`);
+
+    const response = await fetch(apiBase, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Disposition': `attachment; filename="${file.name}"`,
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Upload failed", response.status, errorText);
+      // Fallback: Try with query params if header auth failed (rarely works for media POST but worth a try if server configured for it)
+      // Or return null to let UI show error
+      return null;
+    }
+
+    const data = await response.json();
+    return data.source_url || null;
+  } catch (error) {
+    console.error("Image upload failed:", error);
+    return null;
+  }
+};
+
 export const createProductInWP = async (productData: CreateProductPayload): Promise<{success: boolean; message?: string; product?: any}> => {
   try {
     const config = await getWPConfig();
