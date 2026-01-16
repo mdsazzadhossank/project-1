@@ -227,49 +227,49 @@ export const fetchCategoriesFromWP = async (): Promise<WPCategory[]> => {
   }
 };
 
-export const uploadImageToWP = async (file: File): Promise<string | null> => {
+// Return type changed to object to provide more details on failure
+export const uploadImageToWP = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
   try {
     const config = await getWPConfig();
     if (!config || !config.url || !config.consumerKey) {
       console.error("WP Config missing for upload");
-      return null;
+      return { success: false, error: "Settings not configured" };
     }
 
     const { url, consumerKey, consumerSecret } = config;
     const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
     
-    // Using URL Params for auth to bypass header stripping on some servers
+    // Use URL query parameters for authentication to bypass header stripping
     const apiBase = `${baseUrl}/wp-json/wp/v2/media?consumer_key=${consumerKey}&consumer_secret=${consumerSecret}`;
 
-    // Clean filename to remove spaces and special characters that might break headers
-    // We keep extensions and alphanumeric characters
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    // Use FormData which mimics standard form submission and is robust
+    const formData = new FormData();
+    formData.append('file', file);
 
-    // WP Media API expects raw binary body, not FormData, with Content-Disposition header
     const response = await fetch(apiBase, {
       method: 'POST',
-      headers: {
-        'Content-Disposition': `attachment; filename="${cleanFileName}"`,
-        'Content-Type': file.type
-      },
-      body: file
+      body: formData
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Upload failed", response.status, errorText);
+      let errorMessage = `HTTP ${response.status}`;
       try {
         const errJson = JSON.parse(errorText);
-        console.error("WP Error Message:", errJson.message);
-      } catch (e) {}
-      return null;
+        if (errJson.message) errorMessage = errJson.message;
+        else if (errJson.code) errorMessage = errJson.code;
+      } catch (e) {
+        if (errorText.length < 50) errorMessage = errorText;
+      }
+      return { success: false, error: errorMessage };
     }
 
     const data = await response.json();
-    return data.source_url || null;
-  } catch (error) {
+    return { success: true, url: data.source_url };
+  } catch (error: any) {
     console.error("Image upload failed:", error);
-    return null;
+    return { success: false, error: error.message || "Network Error" };
   }
 };
 

@@ -155,12 +155,14 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
       // Handle Image Upload
       if (selectedImageFile) {
         setUploadingImage(true);
-        const uploadedUrl = await uploadImageToWP(selectedImageFile);
-        if (uploadedUrl) {
-          finalImageUrl = uploadedUrl;
+        const uploadResult = await uploadImageToWP(selectedImageFile);
+        
+        if (uploadResult.success && uploadResult.url) {
+          finalImageUrl = uploadResult.url;
         } else {
-          // If upload fails, ask user if they want to continue
-          if (!confirm("Image upload failed. Do you want to continue without the image?")) {
+          // If upload fails, show specific error and ask user if they want to continue
+          const proceed = confirm(`Image upload failed: ${uploadResult.error || 'Unknown Error'}\n\nDo you want to continue without the image?`);
+          if (!proceed) {
             setIsCreating(false);
             setUploadingImage(false);
             return;
