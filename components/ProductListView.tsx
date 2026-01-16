@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Plus, X, Loader2, Image as ImageIcon, UploadCloud, Box, Layers, Settings, Save, Edit, RefreshCw } from 'lucide-react';
 import { InventoryProduct } from '../types';
@@ -41,9 +40,16 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const [showAddModal, setShowAddModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'inventory' | 'shipping'>('general');
+  
+  // Main Image State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
+  
+  // Gallery State
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [galleryFiles, setGalleryFiles] = useState<{ id: string, file: File, preview: string }[]>([]);
+
   const [uploadingImage, setUploadingImage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -64,7 +70,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     width: '',
     height: '',
     image_url: '', // This will hold the uploaded URL
-    gallery_urls: [''],
+    gallery_urls: [''] as string[],
     selected_categories: [] as number[],
     status: 'publish'
   });
@@ -135,12 +141,25 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+      const file = e.target.files[0] as File;
       setSelectedImageFile(file);
       // Create local preview
       const preview = URL.createObjectURL(file);
       setImagePreviewUrl(preview);
     }
+  };
+
+  const handleGalleryFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files).map((file) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        file: file as File,
+        preview: URL.createObjectURL(file as Blob)
+      }));
+      setGalleryFiles(prev => [...prev, ...newFiles]);
+    }
+    // Reset input so same file can be selected again if needed
+    if (e.target) e.target.value = '';
   };
 
   const resetForm = () => {
@@ -152,6 +171,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     });
     setSelectedImageFile(null);
     setImagePreviewUrl('');
+    setGalleryFiles([]);
     setEditingId(null);
   };
 
@@ -163,6 +183,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
   const openEditModal = async (product: InventoryProduct) => {
     setLoadingDetails(true);
     setEditingId(product.id);
+    setGalleryFiles([]); // Clear pending files
     
     try {
       // Fetch full details from WP because InventoryProduct list only has summary
@@ -184,7 +205,7 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
           width: fullProduct.dimensions?.width || '',
           height: fullProduct.dimensions?.height || '',
           image_url: fullProduct.images?.[0]?.src || '',
-          gallery_urls: fullProduct.images?.slice(1).map((img: any) => img.src) || [''],
+          gallery_urls: fullProduct.images?.slice(1).map((img: any) => img.src) || [],
           selected_categories: fullProduct.categories?.map((c: any) => c.id) || [],
           status: fullProduct.status || 'publish'
         });
@@ -209,12 +230,13 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
     }
 
     setIsCreating(true);
+    setUploadingImage(true);
+
     try {
       let finalImageUrl = productData.image_url;
 
-      // Handle Image Upload
+      // Handle Main Image Upload
       if (selectedImageFile) {
-        setUploadingImage(true);
         const uploadResult = await uploadImageToWP(selectedImageFile);
         
         if (uploadResult.success && uploadResult.url) {
@@ -228,7 +250,17 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
             return;
           }
         }
-        setUploadingImage(false);
+      }
+
+      // Handle Gallery Images Upload
+      const uploadedGalleryUrls: string[] = [];
+      for (const item of galleryFiles) {
+          const res = await uploadImageToWP(item.file);
+          if (res.success && res.url) {
+              uploadedGalleryUrls.push(res.url);
+          } else {
+             console.warn("Failed to upload a gallery image", res.error);
+          }
       }
 
       const payload: CreateProductPayload = {
@@ -241,7 +273,8 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
         categories: productData.selected_categories.map(id => ({ id })),
         images: [
           ...(finalImageUrl ? [{ src: finalImageUrl }] : []),
-          ...productData.gallery_urls.filter(url => url).map(url => ({ src: url }))
+          ...productData.gallery_urls.filter(url => url && url.length > 0).map(url => ({ src: url })),
+          ...uploadedGalleryUrls.map(url => ({ src: url }))
         ]
       };
 
@@ -775,31 +808,58 @@ export const ProductListView: React.FC<ProductListViewProps> = ({ initialProduct
                    <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
                      <h4 className="font-bold text-sm text-gray-700">Product gallery</h4>
                    </div>
-                   <div className="p-4 space-y-2">
-                      {productData.gallery_urls.map((url, idx) => (
-                        <div key={idx} className="flex gap-2">
-                          <input 
-                            type="url"
-                            placeholder="Image URL"
-                            className="flex-1 p-2 border border-gray-200 rounded text-xs outline-none focus:border-orange-500"
-                            value={url}
-                            onChange={(e) => {
-                              const newUrls = [...productData.gallery_urls];
-                              newUrls[idx] = e.target.value;
-                              setProductData({...productData, gallery_urls: newUrls});
-                            }}
-                          />
-                          {idx === productData.gallery_urls.length - 1 ? (
-                            <button onClick={() => setProductData({...productData, gallery_urls: [...productData.gallery_urls, '']})} className="p-2 bg-gray-100 rounded hover:bg-gray-200"><Plus size={14}/></button>
-                          ) : (
-                             <button onClick={() => {
-                               const newUrls = productData.gallery_urls.filter((_, i) => i !== idx);
-                               setProductData({...productData, gallery_urls: newUrls});
-                             }} className="p-2 bg-gray-100 rounded hover:text-red-500"><X size={14}/></button>
-                          )}
+                   <div className="p-4 space-y-3">
+                      <div className="grid grid-cols-3 gap-2">
+                        {/* Existing URLs */}
+                        {productData.gallery_urls.filter(u => u).map((url, idx) => (
+                          <div key={`url-${idx}`} className="relative group aspect-square">
+                            <img src={url} alt="Gallery" className="w-full h-full object-cover rounded border border-gray-200" />
+                            <button 
+                              onClick={() => {
+                                const newUrls = productData.gallery_urls.filter((_, i) => i !== idx);
+                                setProductData({...productData, gallery_urls: newUrls});
+                              }}
+                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ))}
+                        
+                        {/* Pending Uploads */}
+                        {galleryFiles.map((item) => (
+                          <div key={item.id} className="relative group aspect-square">
+                            <img src={item.preview} alt="Gallery Preview" className="w-full h-full object-cover rounded border border-gray-200 opacity-80" />
+                            <button 
+                              onClick={() => setGalleryFiles(prev => prev.filter(f => f.id !== item.id))}
+                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={10} />
+                            </button>
+                            <div className="absolute bottom-1 right-1 bg-blue-500 text-white text-[8px] px-1 rounded">New</div>
+                          </div>
+                        ))}
+
+                        {/* Add Button */}
+                        <div 
+                          onClick={() => galleryInputRef.current?.click()}
+                          className="aspect-square border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
+                        >
+                          <Plus size={24} />
+                          <span className="text-[10px] font-bold mt-1">Add Image</span>
                         </div>
-                      ))}
-                      <p className="text-[10px] text-gray-400 italic">Gallery currently supports external URLs only.</p>
+                      </div>
+
+                      <input 
+                        type="file" 
+                        ref={galleryInputRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={handleGalleryFileSelect} 
+                      />
+                      
+                      <p className="text-[10px] text-gray-400 italic">Select multiple images to upload to gallery.</p>
                    </div>
                 </div>
 
