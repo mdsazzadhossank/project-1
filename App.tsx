@@ -146,7 +146,7 @@ const DashboardContent: React.FC<{
       </div>
 
       <div className="lg:col-span-2">
-        <SellingStatistics />
+        <SellingStatistics data={[]} />
       </div>
     </div>
   </div>
@@ -373,7 +373,7 @@ const App: React.FC = () => {
       case 'expenses':
         return <ExpenseListView expenses={expenses} onAddExpense={handleAddExpense} onDeleteExpense={handleDeleteExpense} />;
       case 'customers':
-        return <CustomerListView customers={customers} onNavigateToSMS={(p) => { setSmsPhoneTarget(p); setActivePage('bulk-sms'); }} />;
+        return <CustomerListView customers={customers} orders={orders} products={products} onNavigateToSMS={(p) => { setSmsPhoneTarget(p); setActivePage('bulk-sms'); }} onRefresh={() => loadAllData()} />;
       case 'orders':
         return <OrderDashboardView orders={filteredOrders} onViewOrder={handleViewOrder} onUpdateStatus={handleUpdateOrderStatus} />;
       case 'order-detail':
