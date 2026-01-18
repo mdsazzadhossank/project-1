@@ -117,11 +117,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, status
   return (
     <aside className="w-64 bg-white border-r border-gray-100 h-screen sticky top-0 flex flex-col overflow-y-auto custom-scrollbar">
       <div className="p-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold italic shadow-md">
-            Bk
+        <div className="flex items-center gap-3">
+          {/* Logo Section */}
+          <img 
+            src="https://ibb.co/MkgsZHxn" 
+            alt="Logo" 
+            className="w-10 h-10 rounded-lg shadow-md object-cover"
+            onError={(e) => {
+              // Fallback if image fails
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+          {/* Fallback Icon if image fails to load */}
+          <div className="w-10 h-10 bg-orange-600 rounded-lg hidden flex items-center justify-center text-white font-bold shadow-md">
+            SA
           </div>
-          <span className="text-xl font-bold text-gray-800 tracking-tight">bdcommerce</span>
+          
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-gray-800 leading-tight">Social Ads</span>
+            <span className="text-xs font-bold text-orange-600 uppercase tracking-wide">Expert</span>
+          </div>
         </div>
       </div>
 
