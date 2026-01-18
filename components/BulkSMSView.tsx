@@ -25,7 +25,9 @@ import {
   ToggleRight,
   ToggleLeft,
   Smartphone,
-  Hash
+  Hash,
+  Package,
+  Tags
 } from 'lucide-react';
 import { Customer, Order, InventoryProduct, SMSAutomationConfig, WCStatus } from '../types';
 import { 
@@ -63,6 +65,11 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
   const [activeTab, setActiveTab] = useState<'database' | 'manual' | 'automation'>('database');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedOrderCount, setSelectedOrderCount] = useState<string>('All');
+  
+  // New Filter States
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedProductId, setSelectedProductId] = useState<string>('All');
+
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set<string>());
   const [manualInput, setManualInput] = useState('');
   const [manualParsedNumbers, setManualParsedNumbers] = useState<string[]>([]);
@@ -147,15 +154,29 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
     setManualParsedNumbers(Array.from(new Set(numbers)));
   }, [manualInput]);
 
+  // Derive unique categories from products
+  const uniqueCategories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category));
+    return ['All', ...Array.from(cats)];
+  }, [products]);
+
+  // Filter available products based on selected category
+  const availableProducts = useMemo(() => {
+    if (selectedCategory === 'All') return products;
+    return products.filter(p => p.category === selectedCategory);
+  }, [products, selectedCategory]);
+
   const filteredCustomers = useMemo(() => {
     const searchVal = String(searchTerm || '').toLowerCase();
     const phoneSearch = String(searchTerm || '');
     const orderCountFilter = String(selectedOrderCount || 'All');
 
     return (customers || []).filter((customer: Customer) => {
+      // 1. Basic Search
       const matchesSearch = customer.name.toLowerCase().includes(searchVal) || customer.phone.includes(phoneSearch);
       if (!matchesSearch) return false;
       
+      // 2. Order Count Filter
       if (orderCountFilter !== 'All') {
         if (orderCountFilter === '4+') {
           if (customer.orderCount < 4) return false;
@@ -164,9 +185,32 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           if (customer.orderCount !== targetCount) return false;
         }
       }
+
+      // 3. Category & Product Purchase History Filter
+      if (selectedCategory !== 'All' || selectedProductId !== 'All') {
+        // Find if this customer has any order containing the target product/category
+        const hasPurchasedTarget = orders.some(order => {
+          // Check if order belongs to customer (by phone matching)
+          if (order.customer.phone !== customer.phone) return false;
+
+          // Check products inside order
+          return order.products.some(orderProd => {
+            const inventoryProd = products.find(p => p.id === orderProd.id);
+            if (!inventoryProd) return false; // Product metadata missing
+
+            const matchesCategory = selectedCategory === 'All' || inventoryProd.category === selectedCategory;
+            const matchesProduct = selectedProductId === 'All' || inventoryProd.id === selectedProductId;
+            
+            return matchesCategory && matchesProduct;
+          });
+        });
+
+        if (!hasPurchasedTarget) return false;
+      }
+
       return true;
     });
-  }, [customers, searchTerm, selectedOrderCount]);
+  }, [customers, searchTerm, selectedOrderCount, selectedCategory, selectedProductId, orders, products]);
 
   const toggleSelectAllDatabase = () => {
     if (selectedPhones.size === filteredCustomers.length && filteredCustomers.length > 0) {
@@ -298,10 +342,17 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
 
           {activeTab === 'database' && (
             <div className="flex-1 overflow-hidden flex flex-col">
-              <div className="p-4 bg-gray-50/30 border-b border-gray-100 grid grid-cols-2 md:grid-cols-2 gap-3">
+              <div className="p-4 bg-gray-50/30 border-b border-gray-100 grid grid-cols-2 md:grid-cols-4 gap-3">
+                {/* Search */}
+                <div className="relative">
+                  <input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none" />
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                </div>
+
+                {/* Order Count Filter */}
                 <div className="relative">
                   <select value={selectedOrderCount} onChange={e => setSelectedOrderCount(e.target.value)} className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none appearance-none cursor-pointer">
-                    <option value="All">All Order Counts</option>
+                    <option value="All">All Orders</option>
                     <option value="0">0 Orders</option>
                     <option value="1">1 Order</option>
                     <option value="2">2 Orders</option>
@@ -311,9 +362,25 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
                   <ClipboardList size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                   <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
+
+                {/* Category Filter */}
                 <div className="relative">
-                  <input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none" />
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setSelectedProductId('All'); }} className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none appearance-none cursor-pointer">
+                    <option value="All">All Categories</option>
+                    {uniqueCategories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <Tags size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                </div>
+
+                {/* Product Filter */}
+                <div className="relative">
+                  <select value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)} className="w-full pl-8 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none appearance-none cursor-pointer">
+                    <option value="All">All Products</option>
+                    {availableProducts.map(p => <option key={p.id} value={p.id}>{p.name.substring(0, 20)}...</option>)}
+                  </select>
+                  <Package size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
@@ -144,7 +143,7 @@ export const POSView: React.FC<POSViewProps> = ({
         shippingCharge: 0,
         discount: extraDiscount,
         total: finalTotal,
-        status: 'Delivered'
+        status: 'completed'
       });
       
       if (order) {
