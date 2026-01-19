@@ -186,8 +186,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, status
         <SidebarItem 
           icon={<ShoppingCart size={18} />} 
           label="Buy Sms" 
+          active={activePage === 'buy-sms'}
           onClick={() => {
-            window.open('https://sms.mram.com.bd/login', '_blank');
+            onNavigate('buy-sms');
+            setIsOrderOpen(false);
+            setIsProductsOpen(false);
           }}
         />
       </div>

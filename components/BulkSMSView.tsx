@@ -27,7 +27,9 @@ import {
   Smartphone,
   Hash,
   Package,
-  Tags
+  Tags,
+  RefreshCcw,
+  Wallet
 } from 'lucide-react';
 import { Customer, Order, InventoryProduct, SMSAutomationConfig, WCStatus } from '../types';
 import { 
@@ -40,7 +42,8 @@ import {
   saveCustomTemplates,
   SMSTemplate,
   getSMSAutomationConfig,
-  saveSMSAutomationConfig
+  saveSMSAutomationConfig,
+  getSMSBalance
 } from '../services/smsService';
 
 interface BulkSMSViewProps {
@@ -79,10 +82,12 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
   const [message, setMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
   const [sendLogs, setSendLogs] = useState<SendLog[]>([]);
   const [smsConfig, setSmsConfig] = useState<SMSConfig>({ endpoint: 'https://sms.mram.com.bd/smsapi', apiKey: '', senderId: '' });
   
+  // Balance State
+  const [smsBalance, setSmsBalance] = useState(0);
+
   // Automation States
   const [automationConfig, setAutomationConfig] = useState<SMSAutomationConfig | null>(null);
   const [isSavingAutomation, setIsSavingAutomation] = useState(false);
@@ -92,14 +97,16 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
 
   useEffect(() => {
     const loadData = async () => {
-      const [savedConfig, savedTemplates, autoConfig] = await Promise.all([
+      const [savedConfig, savedTemplates, autoConfig, bal] = await Promise.all([
         getSMSConfig(),
         getCustomTemplates(),
-        getSMSAutomationConfig()
+        getSMSAutomationConfig(),
+        getSMSBalance()
       ]);
       if (savedConfig) setSmsConfig(savedConfig);
       if (savedTemplates) setTemplates(savedTemplates);
       setAutomationConfig(autoConfig);
+      setSmsBalance(bal);
     };
     loadData();
 
@@ -108,12 +115,17 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
     }
   }, [initialTargetPhone]);
 
+  const refreshBalance = async () => {
+    const bal = await getSMSBalance();
+    setSmsBalance(bal);
+  };
+
   const handleSaveAutomation = async () => {
     if (!automationConfig) return;
     setIsSavingAutomation(true);
     await saveSMSAutomationConfig(automationConfig);
     setIsSavingAutomation(false);
-    alert("অটোমেশন সেটিংস সফলভাবে সেভ হয়েছে!");
+    alert("Automation settings saved successfully!");
   };
 
   const updateAutomationStatus = (status: keyof SMSAutomationConfig, enabled: boolean) => {
@@ -274,6 +286,13 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
 
   const handleSendSMS = async () => {
     if (selectedPhones.size === 0 || !message.trim()) return;
+    
+    // Check balance first (approximated check)
+    if (smsBalance < selectedPhones.size) {
+      alert(`Insufficient SMS Balance! You have ${smsBalance} SMS but trying to send to ${selectedPhones.size} recipients.`);
+      return;
+    }
+
     if (!window.confirm(`Are you sure you want to send SMS to ${selectedPhones.size} recipients?`)) return;
 
     setIsSending(true);
@@ -300,6 +319,9 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
       await new Promise(r => setTimeout(r, 200));
     }
     
+    // Refresh balance after bulk operation
+    await refreshBalance();
+
     setIsSending(false);
     alert(`Process completed. ${successCount}/${selectedPhones.size} successful.`);
   };
@@ -312,9 +334,20 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           <p className="text-sm text-gray-500">Reach your customers instantly with personalized SMS.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowConfig(true)} className="p-2.5 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-orange-600 transition-all flex items-center gap-2 text-sm font-medium shadow-sm">
-            <Settings size={18} /> API Config
-          </button>
+          {/* Balance Card */}
+          <div className="bg-gray-900 text-white px-5 py-2.5 rounded-xl shadow-lg flex items-center gap-3 border border-gray-700">
+            <Wallet size={18} className="text-orange-400" />
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase leading-tight">SMS Balance</p>
+              <p className="text-sm font-black">{smsBalance.toLocaleString()}</p>
+            </div>
+            <button onClick={refreshBalance} className="p-1 hover:bg-gray-700 rounded-full transition-colors ml-1">
+              <RefreshCcw size={12} className={isSending ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          
+          {/* API Config button removed as requested */}
+          
           {activeTab !== 'automation' && (
             <div className="px-4 py-2 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2">
               <Users size={16} className="text-orange-600" />
@@ -324,12 +357,20 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
         </div>
       </div>
 
-      {!smsConfig.apiKey && (
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center gap-4 text-amber-800 shadow-sm">
-          <AlertCircle className="shrink-0" />
-          <p className="text-sm font-bold flex-1">SMS API Not Configured. Update API Key and Sender ID.</p>
-          <button onClick={() => setShowConfig(true)} className="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-amber-700">Configure Now</button>
-        </div>
+      {/* Warning alert removed as requested */}
+
+      {/* Warning if balance is low */}
+      {smsBalance < 10 && smsBalance > 0 && (
+         <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-3 text-red-700 animate-pulse">
+            <AlertTriangle size={18} />
+            <span className="text-xs font-bold">Your SMS Balance is low ({smsBalance} left). Please recharge to avoid interruption.</span>
+         </div>
+      )}
+      {smsBalance === 0 && (
+         <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-3 text-red-700">
+            <AlertTriangle size={18} />
+            <span className="text-xs font-bold">You have 0 SMS credits. You cannot send messages until you recharge.</span>
+         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -539,7 +580,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
               </p>
             </div>
 
-            <button disabled={isSending || selectedPhones.size === 0 || !message.trim()} onClick={handleSendSMS} className="w-full py-4 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-100 hover:bg-orange-700 flex items-center justify-center gap-3 disabled:opacity-50 transition-all active:scale-[0.98]">
+            <button disabled={isSending || selectedPhones.size === 0 || !message.trim() || smsBalance <= 0} onClick={handleSendSMS} className="w-full py-4 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-100 hover:bg-orange-700 flex items-center justify-center gap-3 disabled:opacity-50 transition-all active:scale-[0.98]">
               {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
               Send SMS to {selectedPhones.size} Recipients
             </button>
@@ -598,33 +639,7 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
         </div>
       )}
 
-      {showConfig && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">mram.com.bd Config</h2>
-              </div>
-              <X className="cursor-pointer text-gray-400 hover:text-red-500 transition-colors" onClick={() => setShowConfig(false)} />
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Endpoint URL</label>
-                <input type="text" placeholder="https://sms.mram.com.bd/smsapi" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-orange-500" value={smsConfig.endpoint} onChange={e => setSmsConfig({...smsConfig, endpoint: e.target.value})} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">API Key</label>
-                <input type="password" placeholder="Your API Key" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-orange-500" value={smsConfig.apiKey} onChange={e => setSmsConfig({...smsConfig, apiKey: e.target.value})} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-400 uppercase">Sender ID</label>
-                <input type="text" placeholder="Sender ID" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-orange-500" value={smsConfig.senderId} onChange={e => setSmsConfig({...smsConfig, senderId: e.target.value})} />
-              </div>
-            </div>
-            <button onClick={() => { saveSMSConfig(smsConfig); setShowConfig(false); }} className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg hover:bg-orange-700 transition-all">Save Config</button>
-          </div>
-        </div>
-      )}
+      {/* API Config Modal and Button removed */}
     </div>
   );
 };

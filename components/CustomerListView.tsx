@@ -136,10 +136,11 @@ export const CustomerListView: React.FC<CustomerListViewProps> = ({ customers, o
       .map(s => s.trim().replace(/[^\d]/g, '')) // Remove non-digits
       .filter(s => s.length >= 10); // Simple length check
     
-    const uniqueNumbers = [...new Set(numbers)];
+    const uniqueNumbers = Array.from(new Set(numbers));
     let successCount = 0;
 
-    for (const phone of uniqueNumbers) {
+    for (const item of uniqueNumbers) {
+      const phone = item as string;
       // Check for existing customer to prevent duplicates
       if (customers.some(c => c.phone.replace(/[^\d]/g, '') === phone)) continue;
 

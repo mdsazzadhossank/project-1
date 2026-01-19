@@ -80,8 +80,23 @@ export const saveSMSAutomationConfig = async (config: SMSAutomationConfig) => {
   await saveSetting('sms_automation_config', config);
 };
 
+export const getSMSBalance = async (): Promise<number> => {
+  const val = await fetchSetting('sms_balance');
+  return val ? parseInt(val, 10) : 0;
+};
+
+export const saveSMSBalance = async (balance: number) => {
+  await saveSetting('sms_balance', balance);
+};
+
 export const sendActualSMS = async (config: SMSConfig, phone: string, message: string): Promise<{success: boolean, message: string}> => {
   try {
+    // 1. Check Balance
+    const balance = await getSMSBalance();
+    if (balance <= 0) {
+      return { success: false, message: "Insufficient SMS Balance. Please recharge." };
+    }
+
     const gsmRegex = /^[\u0000-\u007F]*$/;
     const isUnicode = !gsmRegex.test(message);
     const type = isUnicode ? 'unicode' : 'text';
@@ -107,7 +122,16 @@ export const sendActualSMS = async (config: SMSConfig, phone: string, message: s
       return { success: false, message: `Server Error: ${response.statusText}` };
     }
     
-    return await response.json();
+    const result = await response.json();
+
+    if (result.success) {
+      // Deduct 1 unit from balance
+      // Note: In a high concurrency environment, this read-modify-write might be race-condition prone, 
+      // but for this dashboard it's acceptable. Ideally deduction should happen on server-side PHP.
+      await saveSMSBalance(balance - 1);
+    }
+    
+    return result;
   } catch (error: any) {
     console.error("SMS sending failed:", error);
     return { success: false, message: error.message || 'Unknown network error' };

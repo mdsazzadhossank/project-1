@@ -12,6 +12,7 @@ import { BulkSMSView } from './components/BulkSMSView';
 import { CourierDashboardView } from './components/CourierDashboardView';
 import { ExpenseListView } from './components/ExpenseListView';
 import { CustomerListView } from './components/CustomerListView';
+import { BuySMSView } from './components/BuySMSView';
 import { 
   DollarSign, 
   CreditCard, 
@@ -380,6 +381,8 @@ const App: React.FC = () => {
         return selectedOrder ? <OrderDetailView order={selectedOrder} onBack={() => setActivePage('orders')} /> : null;
       case 'all-products':
         return <ProductListView initialProducts={products} />;
+      case 'buy-sms':
+        return <BuySMSView />;
       default:
         return <DashboardContent stats={stats} loadingInsights={loadingInsights} aiInsights={aiInsights} statusCounts={statusCounts} loadingData={loadingData} syncProgress={syncProgress} onRefresh={() => loadAllData()} hasConfig={hasConfig} />;
     }
