@@ -39,8 +39,15 @@ function bkash_call($url, $method, $data, $headers) {
     }
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    
     $response = curl_exec($ch);
+    $err = curl_error($ch);
     curl_close($ch);
+    
+    if ($err) {
+        return ["status" => "error", "message" => "cURL Error: $err"];
+    }
+    
     return json_decode($response, true);
 }
 
@@ -53,8 +60,8 @@ if (!$config) {
     exit;
 }
 
-// Determine Base URL
-$isSandbox = isset($config['isSandbox']) && $config['isSandbox'] === true;
+// Determine Base URL (Robust check for string 'true' or boolean true)
+$isSandbox = isset($config['isSandbox']) && ($config['isSandbox'] === true || $config['isSandbox'] === "true");
 $base_url = $isSandbox ? "https://tokenized.sandbox.bka.sh/v1.2.0-beta" : "https://tokenized.pay.bka.sh/v1.2.0-beta";
 
 // 1. Get Token (Used internally)
@@ -62,7 +69,8 @@ function getToken($config, $base_url) {
     $headers = [
         "Content-Type: application/json",
         "username: " . trim($config['username']),
-        "password: " . trim($config['password'])
+        "password: " . trim($config['password']),
+        "x-app-key: " . trim($config['appKey']) // Added x-app-key header which is required by some gateways
     ];
     $data = json_encode(["app_key" => trim($config['appKey']), "app_secret" => trim($config['appSecret'])]);
     
@@ -82,7 +90,14 @@ if ($action === 'create') {
     if (isset($tokenRes['id_token'])) {
         $token = $tokenRes['id_token'];
     } else {
-        echo json_encode(["status" => "error", "message" => "Auth failed: " . (isset($tokenRes['statusMessage']) ? $tokenRes['statusMessage'] : json_encode($tokenRes))]);
+        // Return detailed error with URL for debugging
+        $errMsg = isset($tokenRes['statusMessage']) ? $tokenRes['statusMessage'] : json_encode($tokenRes);
+        if (isset($tokenRes['message'])) $errMsg = $tokenRes['message']; // Catch gateway errors
+        
+        echo json_encode([
+            "status" => "error", 
+            "message" => "Auth failed at $base_url: " . $errMsg
+        ]);
         exit;
     }
 
@@ -115,7 +130,7 @@ if ($action === 'create') {
     if (isset($res['bkashURL'])) {
         echo json_encode(["status" => "success", "bkashURL" => $res['bkashURL']]);
     } else {
-        echo json_encode(["status" => "error", "message" => "Create failed", "debug" => $res]);
+        echo json_encode(["status" => "error", "message" => "Create failed: " . (isset($res['statusMessage']) ? $res['statusMessage'] : json_encode($res))]);
     }
 
 } elseif ($action === 'callback') {
