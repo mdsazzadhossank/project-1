@@ -14,9 +14,12 @@ export interface SMSTemplate {
   content: string;
 }
 
+const SETTINGS_URL = "api/settings.php";
+const BALANCE_API_URL = "api/manage_sms_balance.php";
+
 const fetchSetting = async (key: string): Promise<any> => {
   try {
-    const res = await fetch(`api/settings.php?key=${key}`);
+    const res = await fetch(`${SETTINGS_URL}?key=${key}`);
     if (!res.ok) return null;
     const text = await res.text();
     if (!text || text === "null") return null;
@@ -35,7 +38,7 @@ const fetchSetting = async (key: string): Promise<any> => {
 
 const saveSetting = async (key: string, value: any) => {
   try {
-    await fetch(`api/settings.php`, {
+    await fetch(SETTINGS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value: JSON.stringify(value) })
@@ -80,13 +83,30 @@ export const saveSMSAutomationConfig = async (config: SMSAutomationConfig) => {
   await saveSetting('sms_automation_config', config);
 };
 
+// Updated to use dedicated balance API
 export const getSMSBalance = async (): Promise<number> => {
-  const val = await fetchSetting('sms_balance');
-  return val ? parseInt(val, 10) : 0;
+  try {
+    const res = await fetch(BALANCE_API_URL);
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return data.balance ? parseInt(data.balance, 10) : 0;
+  } catch (e) {
+    console.error("Error fetching SMS balance:", e);
+    return 0;
+  }
 };
 
+// Updated to use dedicated balance API
 export const saveSMSBalance = async (balance: number) => {
-  await saveSetting('sms_balance', balance);
+  try {
+    await fetch(BALANCE_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ balance })
+    });
+  } catch (e) {
+    console.error("Error saving SMS balance:", e);
+  }
 };
 
 export const sendActualSMS = async (config: SMSConfig, phone: string, message: string): Promise<{success: boolean, message: string}> => {
@@ -126,8 +146,6 @@ export const sendActualSMS = async (config: SMSConfig, phone: string, message: s
 
     if (result.success) {
       // Deduct 1 unit from balance
-      // Note: In a high concurrency environment, this read-modify-write might be race-condition prone, 
-      // but for this dashboard it's acceptable. Ideally deduction should happen on server-side PHP.
       await saveSMSBalance(balance - 1);
     }
     
