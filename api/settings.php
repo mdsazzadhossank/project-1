@@ -1,11 +1,15 @@
 
 <?php
+// Prevent any unwanted output
+ob_start();
+
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    ob_end_clean();
     http_response_code(200);
     exit;
 }
@@ -19,6 +23,9 @@ $conn->query("CREATE TABLE IF NOT EXISTS settings (
     setting_value TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )");
+
+// Clean buffer before response
+ob_clean();
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $key = isset($_GET['key']) ? $_GET['key'] : '';

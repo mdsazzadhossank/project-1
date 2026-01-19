@@ -1,5 +1,8 @@
 
 <?php
+// Prevent any unwanted output (whitespace/warnings)
+ob_start();
+
 header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
@@ -7,11 +10,21 @@ header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers
 
 // Handle preflight request
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    ob_end_clean();
     http_response_code(200);
     exit;
 }
 
 include 'db.php';
+
+// Clean buffer before sending JSON
+ob_clean();
+
+// Check connection explicitly
+if ($conn->connect_error) {
+    echo json_encode(["balance" => 0, "error" => "DB Connection failed: " . $conn->connect_error]);
+    exit;
+}
 
 // 1. Auto-create table if it doesn't exist
 $table_sql = "CREATE TABLE IF NOT EXISTS sms_balance_store (
@@ -20,10 +33,7 @@ $table_sql = "CREATE TABLE IF NOT EXISTS sms_balance_store (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )";
 
-if (!$conn->query($table_sql)) {
-    echo json_encode(["error" => "Error creating table: " . $conn->error]);
-    exit;
-}
+$conn->query($table_sql);
 
 // 2. Ensure at least one row exists
 $check_sql = "SELECT id FROM sms_balance_store LIMIT 1";
@@ -34,7 +44,7 @@ if ($result->num_rows == 0) {
 
 // 3. Handle Requests
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    // FIX: Fetch the latest entry (highest ID) instead of hardcoded ID 1
+    // Fetch the latest entry (highest ID)
     $result = $conn->query("SELECT balance FROM sms_balance_store ORDER BY id DESC LIMIT 1");
     
     if ($result && $result->num_rows > 0) {
@@ -59,7 +69,6 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $target_id = $last_row['id'];
             $update_sql = "UPDATE sms_balance_store SET balance = $new_balance WHERE id = $target_id";
         } else {
-            // Fallback if table is somehow empty
             $update_sql = "INSERT INTO sms_balance_store (balance) VALUES ($new_balance)";
         }
         
