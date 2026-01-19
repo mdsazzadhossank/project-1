@@ -20,23 +20,24 @@ $table_sql = "CREATE TABLE IF NOT EXISTS sms_balance_store (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 )";
 
-if ($conn->query($table_sql) === TRUE) {
-    // 2. Ensure default row exists
-    $check_sql = "SELECT id FROM sms_balance_store WHERE id = 1";
-    $result = $conn->query($check_sql);
-    
-    if ($result->num_rows == 0) {
-        $conn->query("INSERT INTO sms_balance_store (id, balance) VALUES (1, 0)");
-    }
-} else {
+if (!$conn->query($table_sql)) {
     echo json_encode(["error" => "Error creating table: " . $conn->error]);
     exit;
 }
 
+// 2. Ensure at least one row exists
+$check_sql = "SELECT id FROM sms_balance_store LIMIT 1";
+$result = $conn->query($check_sql);
+if ($result->num_rows == 0) {
+    $conn->query("INSERT INTO sms_balance_store (balance) VALUES (0)");
+}
+
 // 3. Handle Requests
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $result = $conn->query("SELECT balance FROM sms_balance_store WHERE id = 1");
-    if ($result->num_rows > 0) {
+    // FIX: Fetch the latest entry (highest ID) instead of hardcoded ID 1
+    $result = $conn->query("SELECT balance FROM sms_balance_store ORDER BY id DESC LIMIT 1");
+    
+    if ($result && $result->num_rows > 0) {
         $row = $result->fetch_assoc();
         echo json_encode(["balance" => (int)$row['balance']]);
     } else {
@@ -48,11 +49,19 @@ elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (isset($input['balance'])) {
         $new_balance = (int)$input['balance'];
-        
-        // Prevent negative balance
         if ($new_balance < 0) $new_balance = 0;
 
-        $update_sql = "UPDATE sms_balance_store SET balance = $new_balance WHERE id = 1";
+        // Find the latest ID to update
+        $last_id_res = $conn->query("SELECT id FROM sms_balance_store ORDER BY id DESC LIMIT 1");
+        
+        if ($last_id_res->num_rows > 0) {
+            $last_row = $last_id_res->fetch_assoc();
+            $target_id = $last_row['id'];
+            $update_sql = "UPDATE sms_balance_store SET balance = $new_balance WHERE id = $target_id";
+        } else {
+            // Fallback if table is somehow empty
+            $update_sql = "INSERT INTO sms_balance_store (balance) VALUES ($new_balance)";
+        }
         
         if ($conn->query($update_sql) === TRUE) {
             echo json_encode(["success" => true, "balance" => $new_balance, "message" => "Balance updated"]);

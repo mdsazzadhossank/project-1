@@ -83,20 +83,23 @@ export const saveSMSAutomationConfig = async (config: SMSAutomationConfig) => {
   await saveSetting('sms_automation_config', config);
 };
 
-// Updated to use dedicated balance API
+// Updated: Robust balance fetching
 export const getSMSBalance = async (): Promise<number> => {
   try {
     const res = await fetch(BALANCE_API_URL);
     if (!res.ok) return 0;
     const data = await res.json();
-    return data.balance ? parseInt(data.balance, 10) : 0;
+    // Check if balance exists and is a valid number, even if it is 0
+    if (data && typeof data.balance !== 'undefined') {
+        return parseInt(data.balance, 10);
+    }
+    return 0;
   } catch (e) {
     console.error("Error fetching SMS balance:", e);
     return 0;
   }
 };
 
-// Updated to use dedicated balance API
 export const saveSMSBalance = async (balance: number) => {
   try {
     await fetch(BALANCE_API_URL, {
