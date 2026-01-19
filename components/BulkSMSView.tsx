@@ -29,7 +29,8 @@ import {
   Package,
   Tags,
   RefreshCcw,
-  Wallet
+  Wallet,
+  Coins
 } from 'lucide-react';
 import { Customer, Order, InventoryProduct, SMSAutomationConfig, WCStatus } from '../types';
 import { 
@@ -157,6 +158,10 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
     }
     return { count, segments, isUnicode };
   }, [message]);
+
+  const totalCost = useMemo(() => {
+    return selectedPhones.size * smsStats.segments;
+  }, [selectedPhones.size, smsStats.segments]);
 
   useEffect(() => {
     const numbers = manualInput
@@ -287,25 +292,28 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
   const handleSendSMS = async () => {
     if (selectedPhones.size === 0 || !message.trim()) return;
     
-    // Check balance first (approximated check)
-    if (smsBalance < selectedPhones.size) {
-      alert(`Insufficient SMS Balance! You have ${smsBalance} SMS but trying to send to ${selectedPhones.size} recipients.`);
+    // Check balance against total cost (recipients * segments)
+    if (smsBalance < totalCost) {
+      alert(`Insufficient SMS Balance! You need ${totalCost} credits, but have ${smsBalance}.`);
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to send SMS to ${selectedPhones.size} recipients?`)) return;
+    if (!window.confirm(`Send SMS to ${selectedPhones.size} recipients?\n\nEstimated Cost: ${totalCost} Credits\n(${selectedPhones.size} contacts × ${smsStats.segments} parts)`)) return;
 
     setIsSending(true);
     setSendLogs([]);
     const phones = Array.from(selectedPhones) as string[];
     let successCount = 0;
+    
+    // IMPORTANT: Deduct per message sent based on its parts
+    const costPerMessage = smsStats.segments;
 
     for (const phone of phones) {
       const customer = customers.find(c => c.phone === phone);
       const customerName = customer ? customer.name.split(' ')[0] : 'Customer';
       const personalizedMessage = message.replace(/\[name\]/g, customerName);
       
-      const res = await sendActualSMS(smsConfig, phone, personalizedMessage);
+      const res = await sendActualSMS(smsConfig, phone, personalizedMessage, costPerMessage);
       
       const logEntry: SendLog = {
         phone,
@@ -316,7 +324,8 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
       
       setSendLogs(prev => [...prev, logEntry]);
       if (res.success) successCount++;
-      await new Promise(r => setTimeout(r, 200));
+      // Small delay to prevent API flooding if necessary
+      await new Promise(r => setTimeout(r, 100));
     }
     
     // Refresh balance after bulk operation
@@ -346,8 +355,6 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
             </button>
           </div>
           
-          {/* API Config button removed as requested */}
-          
           {activeTab !== 'automation' && (
             <div className="px-4 py-2 bg-orange-50 rounded-lg border border-orange-100 flex items-center gap-2">
               <Users size={16} className="text-orange-600" />
@@ -356,8 +363,6 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           )}
         </div>
       </div>
-
-      {/* Warning alert removed as requested */}
 
       {/* Warning if balance is low */}
       {smsBalance < 10 && smsBalance > 0 && (
@@ -536,8 +541,15 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
               <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2"><MessageSquare size={16} className="text-orange-500" /> Composition</h3>
               <div className="flex items-center gap-2">
                 <div className={`px-2 py-1 rounded text-[10px] font-bold border ${smsStats.segments > 1 ? 'bg-orange-500 text-white border-orange-600' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
-                  {smsStats.segments} SMS Parts
+                  {smsStats.segments} SMS Part(s)
                 </div>
+                {/* Cost Display Badge */}
+                {selectedPhones.size > 0 && (
+                   <div className="px-2 py-1 rounded text-[10px] font-bold border bg-blue-50 text-blue-600 border-blue-200 flex items-center gap-1">
+                      <Coins size={10} />
+                      Total Cost: {totalCost} Credits
+                   </div>
+                )}
                 <span className="text-[10px] font-bold text-gray-400 tracking-wider uppercase">{smsStats.count} CHARS</span>
               </div>
             </div>
@@ -575,12 +587,17 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
             
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 flex gap-2.5">
               <Info size={14} className="text-orange-500 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-gray-500 leading-relaxed font-medium">
-                {smsStats.isUnicode ? "Unicode detected: 70/67 chars per SMS." : "GSM detected: 160/153 chars per SMS."}
-              </p>
+              <div className="space-y-1">
+                 <p className="text-[10px] text-gray-500 leading-relaxed font-medium">
+                   {smsStats.isUnicode ? "Unicode detected: 70/67 chars per SMS." : "GSM detected: 160/153 chars per SMS."}
+                 </p>
+                 <p className="text-[10px] text-gray-500 font-bold">
+                   1 SMS = {smsStats.segments} Credits | Total Deduction: {totalCost} Credits
+                 </p>
+              </div>
             </div>
 
-            <button disabled={isSending || selectedPhones.size === 0 || !message.trim() || smsBalance <= 0} onClick={handleSendSMS} className="w-full py-4 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-100 hover:bg-orange-700 flex items-center justify-center gap-3 disabled:opacity-50 transition-all active:scale-[0.98]">
+            <button disabled={isSending || selectedPhones.size === 0 || !message.trim() || smsBalance < totalCost} onClick={handleSendSMS} className="w-full py-4 bg-orange-600 text-white rounded-xl font-bold shadow-lg shadow-orange-100 hover:bg-orange-700 flex items-center justify-center gap-3 disabled:opacity-50 transition-all active:scale-[0.98]">
               {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
               Send SMS to {selectedPhones.size} Recipients
             </button>
@@ -638,8 +655,6 @@ export const BulkSMSView: React.FC<BulkSMSViewProps> = ({ customers, orders, pro
           </div>
         </div>
       )}
-
-      {/* API Config Modal and Button removed */}
     </div>
   );
 };

@@ -112,12 +112,15 @@ export const saveSMSBalance = async (balance: number) => {
   }
 };
 
-export const sendActualSMS = async (config: SMSConfig, phone: string, message: string): Promise<{success: boolean, message: string}> => {
+// Updated: Accepts 'cost' parameter to deduct specific amount based on SMS parts
+export const sendActualSMS = async (config: SMSConfig, phone: string, message: string, cost: number = 1): Promise<{success: boolean, message: string}> => {
   try {
     // 1. Check Balance
     const balance = await getSMSBalance();
-    if (balance <= 0) {
-      return { success: false, message: "Insufficient SMS Balance. Please recharge." };
+    
+    // Ensure sufficient balance for this specific message cost
+    if (balance < cost) {
+      return { success: false, message: `Insufficient SMS Balance. Need ${cost}, have ${balance}.` };
     }
 
     const gsmRegex = /^[\u0000-\u007F]*$/;
@@ -148,8 +151,8 @@ export const sendActualSMS = async (config: SMSConfig, phone: string, message: s
     const result = await response.json();
 
     if (result.success) {
-      // Deduct 1 unit from balance
-      await saveSMSBalance(balance - 1);
+      // Deduct the calculated cost (SMS parts) from balance
+      await saveSMSBalance(balance - cost);
     }
     
     return result;
@@ -176,8 +179,19 @@ export const triggerAutomationSMS = async (order: Order, newStatus: WCStatus) =>
         .replace(/\[order_id\]/g, order.id)
         .replace(/\[tracking_code\]/g, order.courier_tracking_code || 'Pending');
 
-      console.log(`[SMS Automation] Triggered for Order ${order.id} - Status: ${newStatus}`);
-      return await sendActualSMS(config, order.customer.phone, message);
+      // Calculate parts for automation message to deduct correctly
+      const gsmRegex = /^[\u0000-\u007F]*$/;
+      const isUnicode = !gsmRegex.test(message);
+      const count = message.length;
+      let segments = 1;
+      if (isUnicode) {
+        segments = count <= 70 ? 1 : Math.ceil(count / 67);
+      } else {
+        segments = count <= 160 ? 1 : Math.ceil(count / 153);
+      }
+
+      console.log(`[SMS Automation] Triggered for Order ${order.id} - Status: ${newStatus} - Cost: ${segments}`);
+      return await sendActualSMS(config, order.customer.phone, message, segments);
     }
   } catch (e) {
     console.error("SMS Automation trigger failed:", e);
