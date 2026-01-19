@@ -47,27 +47,27 @@ function bkash_call($url, $method, $data, $headers) {
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 $config = getSetting($conn, 'bkash_config');
 
-// Base URL (SandBox or Live)
-$base_url = "https://tokenized.pay.bka.sh/v1.2.0-beta"; // Live URL usually, depends on version
-// If you are using sandbox: https://tokenized.sandbox.bka.sh/v1.2.0-beta
-
 if (!$config) {
     ob_clean();
     echo json_encode(["status" => "error", "message" => "bKash not configured"]);
     exit;
 }
 
+// Determine Base URL
+$isSandbox = isset($config['isSandbox']) && $config['isSandbox'] === true;
+$base_url = $isSandbox ? "https://tokenized.sandbox.bka.sh/v1.2.0-beta" : "https://tokenized.pay.bka.sh/v1.2.0-beta";
+
 // 1. Get Token (Used internally)
 function getToken($config, $base_url) {
     $headers = [
         "Content-Type: application/json",
-        "username: " . $config['username'],
-        "password: " . $config['password']
+        "username: " . trim($config['username']),
+        "password: " . trim($config['password'])
     ];
-    $data = json_encode(["app_key" => $config['appKey'], "app_secret" => $config['appSecret']]);
+    $data = json_encode(["app_key" => trim($config['appKey']), "app_secret" => trim($config['appSecret'])]);
     
     $res = bkash_call("$base_url/token/grant", "POST", $data, $headers);
-    return isset($res['id_token']) ? $res['id_token'] : null;
+    return $res;
 }
 
 ob_clean(); // Ensure clean output
@@ -78,9 +78,11 @@ if ($action === 'create') {
     $amount = $input['amount'];
     $sms_qty = $input['sms_qty']; // We pass this to track how much to add
 
-    $token = getToken($config, $base_url);
-    if (!$token) {
-        echo json_encode(["status" => "error", "message" => "Auth failed"]);
+    $tokenRes = getToken($config, $base_url);
+    if (isset($tokenRes['id_token'])) {
+        $token = $tokenRes['id_token'];
+    } else {
+        echo json_encode(["status" => "error", "message" => "Auth failed: " . (isset($tokenRes['statusMessage']) ? $tokenRes['statusMessage'] : json_encode($tokenRes))]);
         exit;
     }
 
@@ -105,7 +107,7 @@ if ($action === 'create') {
     $headers = [
         "Content-Type: application/json",
         "Authorization: " . $token,
-        "x-app-key: " . $config['appKey']
+        "x-app-key: " . trim($config['appKey'])
     ];
 
     $res = bkash_call("$base_url/tokenized/checkout/create", "POST", $create_data, $headers);
@@ -131,9 +133,11 @@ if ($action === 'create') {
         exit;
     }
 
-    $token = getToken($config, $base_url);
-    if (!$token) {
-        header("Location: $app_url/?payment_status=error_auth");
+    $tokenRes = getToken($config, $base_url);
+    if (isset($tokenRes['id_token'])) {
+        $token = $tokenRes['id_token'];
+    } else {
+        header("Location: $app_url/?payment_status=error_auth&msg=" . urlencode("Auth failed during callback"));
         exit;
     }
 
@@ -141,7 +145,7 @@ if ($action === 'create') {
     $headers = [
         "Content-Type: application/json",
         "Authorization: " . $token,
-        "x-app-key: " . $config['appKey']
+        "x-app-key: " . trim($config['appKey'])
     ];
 
     $res = bkash_call("$base_url/tokenized/checkout/execute", "POST", $execute_data, $headers);

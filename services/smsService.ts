@@ -19,6 +19,7 @@ export interface BkashConfig {
   appSecret: string;
   username: string;
   password: string;
+  isSandbox?: boolean;
 }
 
 const SETTINGS_URL = "api/settings.php";

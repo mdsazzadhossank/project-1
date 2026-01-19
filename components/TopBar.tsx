@@ -16,7 +16,7 @@ export const TopBar: React.FC = () => {
     clientId: '', clientSecret: '', username: '', password: '', storeId: '', isSandbox: true, webhookSecret: ''
   });
   const [bkashConfig, setBkashConfig] = useState<BkashConfig>({
-    appKey: '', appSecret: '', username: '', password: ''
+    appKey: '', appSecret: '', username: '', password: '', isSandbox: false
   });
   
   const [copiedPathao, setCopiedPathao] = useState(false);
@@ -376,6 +376,15 @@ export const TopBar: React.FC = () => {
                     <div className="space-y-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase">Password</label>
                         <input type="password" value={bkashConfig.password} onChange={e => setBkashConfig({...bkashConfig, password: e.target.value})} className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="Password" />
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                        <input 
+                          type="checkbox" 
+                          id="bkash-sandbox" 
+                          checked={bkashConfig.isSandbox || false} 
+                          onChange={e => setBkashConfig({...bkashConfig, isSandbox: e.target.checked})} 
+                        />
+                        <label htmlFor="bkash-sandbox" className="text-xs font-medium text-gray-600">Use Sandbox Mode (Test)</label>
                     </div>
                 </div>
               )}
