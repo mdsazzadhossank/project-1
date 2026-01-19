@@ -25,7 +25,9 @@ import {
   Receipt,
   Loader2,
   RefreshCcw,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { getBusinessInsights } from './services/geminiService';
 import { fetchOrdersFromWP, fetchProductsFromWP, getWPConfig, fetchCategoriesFromWP, WPCategory, updateOrderInWP } from './services/wordpressService';
@@ -167,6 +169,8 @@ const App: React.FC = () => {
   const [loadingData, setLoadingData] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{current: number, total: number} | null>(null);
   const [hasConfig, setHasConfig] = useState(true);
+  const [paymentSuccessMsg, setPaymentSuccessMsg] = useState<string | null>(null);
+
   const [stats, setStats] = useState<DashboardStats>({
     netProfit: 0,
     grossProfit: 0,
@@ -180,6 +184,21 @@ const App: React.FC = () => {
 
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
+
+  // Check URL params for payment status
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('payment_status');
+    const added = params.get('added');
+    
+    if (status === 'success') {
+        setPaymentSuccessMsg(`Payment Successful! ${added || ''} SMS credits added to your account.`);
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (status === 'failed') {
+        alert("Payment Failed: " + (params.get('msg') || "Unknown error"));
+    }
+  }, []);
 
   useEffect(() => {
     ordersRef.current = orders;
@@ -391,7 +410,17 @@ const App: React.FC = () => {
   return (
     <div className="flex min-h-screen">
       <Sidebar activePage={activePage === 'order-detail' ? 'orders' : activePage} onNavigate={handleNavigate} statusCounts={statusCounts} activeStatus={filterStatus} onStatusFilter={setFilterStatus} />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col relative">
+        {paymentSuccessMsg && (
+            <div className="absolute top-20 right-8 z-50 bg-green-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-top-4">
+                <CheckCircle size={24} />
+                <div>
+                    <h4 className="font-bold">Success!</h4>
+                    <p className="text-sm opacity-90">{paymentSuccessMsg}</p>
+                </div>
+                <button onClick={() => setPaymentSuccessMsg(null)}><X size={18} /></button>
+            </div>
+        )}
         <TopBar />
         <main className="p-8">{renderContent()}</main>
       </div>

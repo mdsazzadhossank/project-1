@@ -14,8 +14,16 @@ export interface SMSTemplate {
   content: string;
 }
 
+export interface BkashConfig {
+  appKey: string;
+  appSecret: string;
+  username: string;
+  password: string;
+}
+
 const SETTINGS_URL = "api/settings.php";
 const BALANCE_API_URL = "api/manage_sms_balance.php";
+const BKASH_RELAY_URL = "api/bkash_relay.php";
 
 const fetchSetting = async (key: string): Promise<any> => {
   try {
@@ -54,6 +62,28 @@ export const getSMSConfig = async (): Promise<SMSConfig | null> => {
 
 export const saveSMSConfig = async (config: SMSConfig) => {
   await saveSetting('sms_config', config);
+};
+
+export const getBkashConfig = async (): Promise<BkashConfig | null> => {
+  return await fetchSetting('bkash_config') as BkashConfig | null;
+};
+
+export const saveBkashConfig = async (config: BkashConfig) => {
+  await saveSetting('bkash_config', config);
+};
+
+export const createBkashPayment = async (amount: number, smsQty: number) => {
+  try {
+    const res = await fetch(`${BKASH_RELAY_URL}?action=create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, sms_qty: smsQty })
+    });
+    return await res.json();
+  } catch (e) {
+    console.error("Failed to create bKash payment:", e);
+    return { status: "error", message: "Network error" };
+  }
 };
 
 export const getCustomTemplates = async (): Promise<SMSTemplate[]> => {

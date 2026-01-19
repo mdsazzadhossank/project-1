@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   MessageSquare, 
@@ -9,9 +9,11 @@ import {
   Smartphone,
   Loader2,
   X,
-  CheckCircle
+  CheckCircle,
+  Settings,
+  Lock
 } from 'lucide-react';
-import { saveSMSBalance, getSMSBalance } from '../services/smsService';
+import { saveSMSBalance, getSMSBalance, getBkashConfig, saveBkashConfig, createBkashPayment, BkashConfig } from '../services/smsService';
 
 interface SMSPackage {
   id: number;
@@ -27,6 +29,29 @@ export const BuySMSView: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<SMSPackage | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Settings Logic
+  const [showSettings, setShowSettings] = useState(false);
+  const [bkashConfig, setBkashConfig] = useState<BkashConfig>({
+    appKey: '',
+    appSecret: '',
+    username: '',
+    password: ''
+  });
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      const config = await getBkashConfig();
+      if (config) setBkashConfig(config);
+    };
+    loadConfig();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    await saveBkashConfig(bkashConfig);
+    setShowSettings(false);
+    alert("bKash credentials saved successfully!");
+  };
 
   const packages: SMSPackage[] = [
     {
@@ -73,11 +98,31 @@ export const BuySMSView: React.FC = () => {
     }
   ];
 
-  const handleBuy = async () => {
+  const handleBuy = async (method: 'bkash' | 'manual') => {
     setIsProcessing(true);
     
-    // Simulate API call / Payment verification
-    // In a real implementation, we would integrate payment gateway callback
+    if (method === 'bkash') {
+        if (!bkashConfig.appKey || !bkashConfig.appSecret) {
+            alert("bKash is not configured. Please click the settings icon to setup.");
+            setIsProcessing(false);
+            return;
+        }
+
+        if (selectedPackage) {
+            const res = await createBkashPayment(selectedPackage.price, selectedPackage.smsCount);
+            if (res.status === 'success' && res.bkashURL) {
+                // Redirect to bKash gateway
+                window.location.href = res.bkashURL;
+                // Note: The execution will happen in the backend callback logic.
+            } else {
+                alert("Payment initiation failed: " + (res.message || "Unknown error"));
+                setIsProcessing(false);
+            }
+        }
+        return;
+    }
+
+    // Fallback for manual or dummy (original logic)
     setTimeout(async () => {
       if (selectedPackage) {
         try {
@@ -94,9 +139,14 @@ export const BuySMSView: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
-      <div className="text-center space-y-2 max-w-2xl mx-auto">
-        <h2 className="text-3xl font-black text-gray-800">Buy SMS Credits</h2>
-        <p className="text-gray-500">Choose a package that suits your business needs. Instant activation.</p>
+      <div className="flex justify-between items-start">
+        <div className="text-center space-y-2 max-w-2xl mx-auto flex-1">
+            <h2 className="text-3xl font-black text-gray-800">Buy SMS Credits</h2>
+            <p className="text-gray-500">Choose a package that suits your business needs. Instant activation.</p>
+        </div>
+        <button onClick={() => setShowSettings(true)} className="p-3 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-orange-600 hover:border-orange-200 transition-all shadow-sm">
+            <Settings size={20} />
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-8">
@@ -159,9 +209,8 @@ export const BuySMSView: React.FC = () => {
         <div>
           <h4 className="font-bold text-blue-900 mb-1">Secure & Automated</h4>
           <p className="text-sm text-blue-700 leading-relaxed">
-            Your credits will be added to your account immediately after payment verification. 
-            We use SSL encryption for all transactions. Need a custom enterprise plan? 
-            <span className="font-bold underline cursor-pointer ml-1">Contact Sales</span>.
+            Your credits will be added to your account immediately after payment verification via bKash. 
+            We use secure tokenized payment API.
           </p>
         </div>
       </div>
@@ -196,35 +245,31 @@ export const BuySMSView: React.FC = () => {
                 <div className="space-y-3">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Select Payment Method</p>
                   <div className="grid grid-cols-2 gap-3">
-                    <button className="p-4 border border-gray-200 rounded-xl hover:border-pink-500 hover:bg-pink-50 transition-all flex flex-col items-center gap-2 group">
-                      <div className="w-10 h-10 bg-pink-100 text-pink-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <button 
+                      onClick={() => handleBuy('bkash')}
+                      className="p-4 border-2 border-pink-100 bg-pink-50 rounded-xl hover:border-pink-500 transition-all flex flex-col items-center gap-2 group cursor-pointer"
+                    >
+                      <div className="w-10 h-10 bg-white text-pink-600 rounded-lg flex items-center justify-center shadow-sm">
                         <Smartphone size={20} />
                       </div>
-                      <span className="text-xs font-bold text-gray-600 group-hover:text-pink-600">Bkash</span>
+                      <span className="text-xs font-black text-pink-600">bKash Pay</span>
                     </button>
-                    <button className="p-4 border border-gray-200 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
-                      <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Smartphone size={20} />
-                      </div>
-                      <span className="text-xs font-bold text-gray-600 group-hover:text-orange-600">Nagad</span>
-                    </button>
-                    <button className="p-4 border border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center gap-2 group col-span-2">
-                      <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                    
+                    <button 
+                      className="p-4 border border-gray-200 rounded-xl opacity-50 flex flex-col items-center gap-2 group cursor-not-allowed"
+                      title="Coming Soon"
+                    >
+                      <div className="w-10 h-10 bg-gray-100 text-gray-400 rounded-lg flex items-center justify-center">
                         <CreditCard size={20} />
                       </div>
-                      <span className="text-xs font-bold text-gray-600 group-hover:text-blue-600">Debit/Credit Card</span>
+                      <span className="text-xs font-bold text-gray-400">Cards (Soon)</span>
                     </button>
                   </div>
                 </div>
 
-                <button 
-                  onClick={handleBuy}
-                  disabled={isProcessing}
-                  className="w-full py-4 bg-gray-900 text-white font-bold rounded-2xl shadow-lg hover:bg-black transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <CreditCard size={20} />}
-                  {isProcessing ? 'Processing...' : `Pay ৳${selectedPackage.price} Now`}
-                </button>
+                <div className="pt-2 text-center text-xs text-gray-400 italic">
+                    By clicking pay, you will be redirected to payment gateway.
+                </div>
               </div>
             </div>
           ) : (
@@ -245,6 +290,40 @@ export const BuySMSView: React.FC = () => {
                </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                    <div className="flex items-center gap-2">
+                        <Lock className="text-pink-600" size={18} />
+                        <h3 className="font-bold text-gray-800">bKash Merchant API</h3>
+                    </div>
+                    <button onClick={() => setShowSettings(false)}><X size={20} className="text-gray-400" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Key</label>
+                        <input type="text" value={bkashConfig.appKey} onChange={e => setBkashConfig({...bkashConfig, appKey: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="App Key" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Secret</label>
+                        <input type="password" value={bkashConfig.appSecret} onChange={e => setBkashConfig({...bkashConfig, appSecret: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="App Secret" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Username</label>
+                        <input type="text" value={bkashConfig.username} onChange={e => setBkashConfig({...bkashConfig, username: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="Username" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Password</label>
+                        <input type="password" value={bkashConfig.password} onChange={e => setBkashConfig({...bkashConfig, password: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="Password" />
+                    </div>
+                    <button onClick={handleSaveSettings} className="w-full py-3 bg-pink-600 text-white font-bold rounded-xl mt-2">Save Credentials</button>
+                </div>
+            </div>
         </div>
       )}
     </div>
