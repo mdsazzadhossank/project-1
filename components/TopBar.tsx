@@ -1,19 +1,24 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, Globe, RefreshCcw, Calendar, ChevronDown, LayoutGrid, Settings, X, Truck, Copy, Check, Download, AlertCircle } from 'lucide-react';
+import { Search, Bell, Globe, RefreshCcw, Calendar, ChevronDown, LayoutGrid, Settings, X, Truck, Copy, Check, Download, AlertCircle, Lock } from 'lucide-react';
 import { getWPConfig, saveWPConfig, WPConfig } from '../services/wordpressService';
 import { getCourierConfig, saveCourierConfig } from '../services/courierService';
 import { getPathaoConfig, savePathaoConfig } from '../services/pathaoService';
+import { getBkashConfig, saveBkashConfig, BkashConfig } from '../services/smsService';
 import { CourierConfig, PathaoConfig } from '../types';
 
 export const TopBar: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState<'wp' | 'courier' | 'pathao'>('wp');
+  const [activeTab, setActiveTab] = useState<'wp' | 'courier' | 'pathao' | 'bkash'>('wp');
   const [config, setConfig] = useState<WPConfig>({ url: '', consumerKey: '', consumerSecret: '' });
   const [courierConfig, setCourierConfig] = useState<CourierConfig>({ apiKey: '', secretKey: '' });
   const [pathaoConfig, setPathaoConfig] = useState<PathaoConfig>({
     clientId: '', clientSecret: '', username: '', password: '', storeId: '', isSandbox: true, webhookSecret: ''
   });
+  const [bkashConfig, setBkashConfig] = useState<BkashConfig>({
+    appKey: '', appSecret: '', username: '', password: ''
+  });
+  
   const [copiedPathao, setCopiedPathao] = useState(false);
   const [copiedSteadfast, setCopiedSteadfast] = useState(false);
 
@@ -25,9 +30,13 @@ export const TopBar: React.FC = () => {
       if (savedCourier) setCourierConfig(savedCourier);
       const savedPathao = await getPathaoConfig();
       if (savedPathao) setPathaoConfig(savedPathao);
+      const savedBkash = await getBkashConfig();
+      if (savedBkash) setBkashConfig(savedBkash);
     };
-    loadConfig();
-  }, []);
+    if (showSettings) {
+      loadConfig();
+    }
+  }, [showSettings]);
 
   const handleSave = async () => {
     if (activeTab === 'wp') {
@@ -36,6 +45,8 @@ export const TopBar: React.FC = () => {
       await saveCourierConfig(courierConfig);
     } else if (activeTab === 'pathao') {
       await savePathaoConfig(pathaoConfig);
+    } else if (activeTab === 'bkash') {
+      await saveBkashConfig(bkashConfig);
     }
     setShowSettings(false);
     window.location.reload();
@@ -122,24 +133,30 @@ export const TopBar: React.FC = () => {
               </button>
             </div>
             
-            <div className="flex border-b border-gray-100 shrink-0">
+            <div className="flex border-b border-gray-100 shrink-0 overflow-x-auto">
               <button 
                 onClick={() => setActiveTab('wp')}
-                className={`flex-1 py-3 text-[10px] font-bold uppercase transition-colors ${activeTab === 'wp' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase whitespace-nowrap px-4 transition-colors ${activeTab === 'wp' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
               >
                 WordPress
               </button>
               <button 
                 onClick={() => setActiveTab('courier')}
-                className={`flex-1 py-3 text-[10px] font-bold uppercase transition-colors ${activeTab === 'courier' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase whitespace-nowrap px-4 transition-colors ${activeTab === 'courier' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
               >
                 Steadfast
               </button>
               <button 
                 onClick={() => setActiveTab('pathao')}
-                className={`flex-1 py-3 text-[10px] font-bold uppercase transition-colors ${activeTab === 'pathao' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase whitespace-nowrap px-4 transition-colors ${activeTab === 'pathao' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
               >
                 Pathao
+              </button>
+              <button 
+                onClick={() => setActiveTab('bkash')}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase whitespace-nowrap px-4 transition-colors ${activeTab === 'bkash' ? 'text-orange-600 border-b-2 border-orange-600' : 'text-gray-400'}`}
+              >
+                bKash
               </button>
             </div>
 
@@ -177,7 +194,6 @@ export const TopBar: React.FC = () => {
                     />
                   </div>
                   
-                  {/* Plugin Download Section */}
                   <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 mt-4">
                     <div className="flex gap-3">
                       <AlertCircle size={20} className="text-orange-600 shrink-0" />
@@ -222,7 +238,6 @@ export const TopBar: React.FC = () => {
                     />
                   </div>
 
-                  {/* Steadfast Webhook Section */}
                   <div className="pt-2 border-t border-gray-100 mt-2 space-y-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-orange-600 uppercase">Webhook URL (Copy to Steadfast Panel)</label>
@@ -241,13 +256,6 @@ export const TopBar: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="bg-blue-50 p-3 rounded-lg flex gap-3 text-blue-600">
-                    <Truck size={16} className="shrink-0" />
-                    <p className="text-[10px] leading-relaxed">
-                      Collect keys from <span className="font-bold">Steadfast Panel &gt; Settings &gt; API</span>. Set the Webhook URL there for auto updates.
-                    </p>
                   </div>
                 </>
               )}
@@ -305,7 +313,6 @@ export const TopBar: React.FC = () => {
                     />
                   </div>
                   
-                  {/* Pathao Webhook Section */}
                   <div className="pt-2 border-t border-gray-100 mt-2 space-y-3">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-orange-600 uppercase">Webhook URL (Copy to Pathao Panel)</label>
@@ -346,6 +353,31 @@ export const TopBar: React.FC = () => {
                     <label htmlFor="sandbox" className="text-xs font-medium text-gray-600">Use Sandbox (Testing)</label>
                   </div>
                 </>
+              )}
+
+              {activeTab === 'bkash' && (
+                <div className="space-y-4 animate-in fade-in">
+                    <div className="bg-pink-50 p-3 rounded-lg border border-pink-100 mb-4 flex items-center gap-3 text-pink-700">
+                        <Lock size={18} />
+                        <p className="text-[10px]">These credentials are stored securely in your database and are used for payment verification.</p>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Key</label>
+                        <input type="text" value={bkashConfig.appKey} onChange={e => setBkashConfig({...bkashConfig, appKey: e.target.value})} className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="App Key" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Secret</label>
+                        <input type="password" value={bkashConfig.appSecret} onChange={e => setBkashConfig({...bkashConfig, appSecret: e.target.value})} className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="App Secret" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Username</label>
+                        <input type="text" value={bkashConfig.username} onChange={e => setBkashConfig({...bkashConfig, username: e.target.value})} className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="Username" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Password</label>
+                        <input type="password" value={bkashConfig.password} onChange={e => setBkashConfig({...bkashConfig, password: e.target.value})} className="w-full p-2.5 bg-gray-50 border border-gray-100 rounded-lg text-sm outline-none focus:border-orange-500" placeholder="Password" />
+                    </div>
+                </div>
               )}
 
               <div className="pt-4 shrink-0">

@@ -1,19 +1,16 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   CheckCircle2, 
-  MessageSquare, 
   Zap, 
   ShieldCheck, 
   CreditCard, 
   Smartphone,
   Loader2,
   X,
-  CheckCircle,
-  Settings,
-  Lock
+  CheckCircle
 } from 'lucide-react';
-import { saveSMSBalance, getSMSBalance, getBkashConfig, saveBkashConfig, createBkashPayment, BkashConfig } from '../services/smsService';
+import { saveSMSBalance, getSMSBalance, getBkashConfig, createBkashPayment } from '../services/smsService';
 
 interface SMSPackage {
   id: number;
@@ -29,29 +26,6 @@ export const BuySMSView: React.FC = () => {
   const [selectedPackage, setSelectedPackage] = useState<SMSPackage | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  
-  // Settings Logic
-  const [showSettings, setShowSettings] = useState(false);
-  const [bkashConfig, setBkashConfig] = useState<BkashConfig>({
-    appKey: '',
-    appSecret: '',
-    username: '',
-    password: ''
-  });
-
-  useEffect(() => {
-    const loadConfig = async () => {
-      const config = await getBkashConfig();
-      if (config) setBkashConfig(config);
-    };
-    loadConfig();
-  }, []);
-
-  const handleSaveSettings = async () => {
-    await saveBkashConfig(bkashConfig);
-    setShowSettings(false);
-    alert("bKash credentials saved successfully!");
-  };
 
   const packages: SMSPackage[] = [
     {
@@ -102,8 +76,10 @@ export const BuySMSView: React.FC = () => {
     setIsProcessing(true);
     
     if (method === 'bkash') {
-        if (!bkashConfig.appKey || !bkashConfig.appSecret) {
-            alert("bKash is not configured. Please click the settings icon to setup.");
+        const bkashConfig = await getBkashConfig();
+        
+        if (!bkashConfig || !bkashConfig.appKey || !bkashConfig.appSecret) {
+            alert("bKash is not configured in the database. Please configure it via Dashboard > Connections.");
             setIsProcessing(false);
             return;
         }
@@ -113,7 +89,6 @@ export const BuySMSView: React.FC = () => {
             if (res.status === 'success' && res.bkashURL) {
                 // Redirect to bKash gateway
                 window.location.href = res.bkashURL;
-                // Note: The execution will happen in the backend callback logic.
             } else {
                 alert("Payment initiation failed: " + (res.message || "Unknown error"));
                 setIsProcessing(false);
@@ -144,9 +119,6 @@ export const BuySMSView: React.FC = () => {
             <h2 className="text-3xl font-black text-gray-800">Buy SMS Credits</h2>
             <p className="text-gray-500">Choose a package that suits your business needs. Instant activation.</p>
         </div>
-        <button onClick={() => setShowSettings(true)} className="p-3 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-orange-600 hover:border-orange-200 transition-all shadow-sm">
-            <Settings size={20} />
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-8">
@@ -290,40 +262,6 @@ export const BuySMSView: React.FC = () => {
                </button>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250] flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                    <div className="flex items-center gap-2">
-                        <Lock className="text-pink-600" size={18} />
-                        <h3 className="font-bold text-gray-800">bKash Merchant API</h3>
-                    </div>
-                    <button onClick={() => setShowSettings(false)}><X size={20} className="text-gray-400" /></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Key</label>
-                        <input type="text" value={bkashConfig.appKey} onChange={e => setBkashConfig({...bkashConfig, appKey: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="App Key" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">App Secret</label>
-                        <input type="password" value={bkashConfig.appSecret} onChange={e => setBkashConfig({...bkashConfig, appSecret: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="App Secret" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Username</label>
-                        <input type="text" value={bkashConfig.username} onChange={e => setBkashConfig({...bkashConfig, username: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="Username" />
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Password</label>
-                        <input type="password" value={bkashConfig.password} onChange={e => setBkashConfig({...bkashConfig, password: e.target.value})} className="w-full p-2 border rounded text-xs" placeholder="Password" />
-                    </div>
-                    <button onClick={handleSaveSettings} className="w-full py-3 bg-pink-600 text-white font-bold rounded-xl mt-2">Save Credentials</button>
-                </div>
-            </div>
         </div>
       )}
     </div>
